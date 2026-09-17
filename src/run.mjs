@@ -133,10 +133,17 @@ async function setupAgents({ args, ui, dir, key, me }) {
   Object.assign(vars, seeds.slugs);
   for (const [n, v] of Object.entries(vars)) { if (!v) continue; const r = pack.setVariable(fork.dest, n, v, args.dryRun); out.variables.push(r); }
   ui.ok(`${out.variables.length} repository variable(s) ${args.dryRun ? "to set" : "set"} (DRY_RUN=1: every agent stays in safe mode)`);
-  const wf = firecrawl ? "market-research-refresh.yml" : "weekly-activity-report.yml";
-  const d = pack.dispatchDryRun(fork.dest, wf, args.dryRun);
-  out.dryRunDispatch = d;
-  ui.ok(`${wf}: ${d.action}${d.error ? ` — ${d.error}` : ""} — read it under Actions, then set DRY_RUN=0 for the agents you trust`);
+  // No point dispatching a run that will only fail for a missing key: say what is missing instead.
+  if (!anthropic || !resend) {
+    const missing = [!anthropic && "ANTHROPIC_API_KEY", !resend && "RESEND_API_KEY"].filter(Boolean);
+    out.incomplete = missing;
+    ui.warn(`not dispatching a run: ${missing.join(" and ")} still missing. Add them as repository secrets (or re-run with them in the environment), then run any agent workflow with dry_run=1.`);
+  } else {
+    const wf = firecrawl ? "market-research-refresh.yml" : "weekly-activity-report.yml";
+    const d = pack.dispatchDryRun(fork.dest, wf, args.dryRun);
+    out.dryRunDispatch = d;
+    ui.ok(`${wf}: ${d.action}${d.error ? ` — ${d.error}` : ""} — read it under Actions, then set DRY_RUN=0 for the agents you trust`);
+  }
   out.repo = pack.repoSlug(fork.dest);
   return out;
 }
