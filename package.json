@@ -1,6 +1,6 @@
 {
   "name": "@getnoan/wizard",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "One command from nothing to a grounded agent: sign in to NOAN, wire your coding assistant, install the skill, and set up the agent pack.",
   "license": "MIT",
   "type": "module",
