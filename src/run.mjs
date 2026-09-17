@@ -86,7 +86,7 @@ export async function run(args) {
   ui.step(5, "The agent pack");
   let wantAgents = args.agents;
   if (wantAgents == null) wantAgents = ui.interactive ? await ui.confirm("Set up the six open-source agents on your GitHub account too?", false) : false;
-  if (wantAgents) report.steps.agents = await setupAgents({ args, ui, dir, key, me });
+  if (wantAgents) report.steps.agents = await setupAgents({ args, ui, dir, key, me, report });
   else { ui.info("skipped" + (args.yes && args.agents == null ? " (pass --agents to include it)" : "")); report.steps.agents = { skipped: true }; }
 
   /* 6. report */
@@ -96,7 +96,7 @@ export async function run(args) {
 
 async function ask(ui, q, o) { return ui.ask(q, o); }
 
-async function setupAgents({ args, ui, dir, key, me }) {
+async function setupAgents({ args, ui, dir, key, me, report }) {
   const ready = pack.ghReady();
   if (!ready.ok) { ui.warn(ready.reason); return { ok: false, reason: ready.reason }; }
   const fork = pack.forkAndClone(dir, { dryRun: args.dryRun });
@@ -131,6 +131,16 @@ async function setupAgents({ args, ui, dir, key, me }) {
   out.seeds = seeds.rows;
   for (const r of seeds.rows) ui.ok(`${r.seed}: ${r.action}${r.slugs != null ? ` (${r.slugs} slug(s))` : ""}${r.error ? ` — ${r.error}` : ""}`);
   Object.assign(vars, seeds.slugs);
+  // The blocks the agents read that hold no fact: one task each on the user's board, and a line in the report.
+  const grounding = args.dryRun ? { available: false } : pack.runGroundingCheck(fork.dest, { NOAN_PERSONAL_API_KEY: key });
+  out.grounding = grounding;
+  if (grounding.available) {
+    if (grounding.gaps.length) {
+      ui.warn(`${grounding.gaps.length} block(s) the agents read hold no fact — ${grounding.filed.filter(f => f.action === "filed").length} task(s) filed on your NOAN board`);
+      for (const g of grounding.gaps) ui.info(`  ${g.title}: needed by ${g.agents.join(", ")}`);
+      report.next.push({ id: "grounding", say: `Fill the ${grounding.gaps.length} block(s) the agents read (tasks are on your NOAN board): ${grounding.gaps.map(g => g.title).join(", ")}.`, why: "an agent grounded in an empty block fails quietly" });
+    } else ui.ok("every block the agents read holds a fact");
+  }
   for (const [n, v] of Object.entries(vars)) { if (!v) continue; const r = pack.setVariable(fork.dest, n, v, args.dryRun); out.variables.push(r); }
   ui.ok(`${out.variables.length} repository variable(s) ${args.dryRun ? "to set" : "set"} (DRY_RUN=1: every agent stays in safe mode)`);
   // No point dispatching a run that will only fail for a missing key: say what is missing instead.
