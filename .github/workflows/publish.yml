@@ -1,0 +1,52 @@
+# Publishes @getnoan/wizard to npm from a GitHub release, with no token anywhere:
+# npm's trusted publishing trusts THIS workflow file in THIS repo, by name, and the
+# provenance attestation is generated automatically. Configure it once on the
+# package's npm settings page (Trusted Publisher → GitHub Actions: organisation
+# getnoan, repository wizard, workflow filename publish.yml). Until that is done,
+# this workflow fails at `npm publish` and nothing is published.
+#
+# A GitHub release tagged v0.1.0 publishes version 0.1.0 under the tag `next`
+# when the release is marked as a pre-release, and under `latest` otherwise —
+# so launch day is "edit the release, untick pre-release" or a new release.
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "npm dist-tag (next while private, latest at launch)"
+        required: true
+        default: "next"
+
+permissions:
+  contents: read
+  id-token: write   # the OIDC token npm trusts instead of a secret
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"          # trusted publishing needs Node ≥ 22.14 and npm ≥ 11.5.1
+          registry-url: "https://registry.npmjs.org"
+      - run: npm install -g npm@latest
+      - run: node --test
+      - name: The tag in package.json matches the release tag
+        if: github.event_name == 'release'
+        run: |
+          v="$(node -p "require('./package.json').version")"
+          test "v$v" = "${{ github.event.release.tag_name }}" || { echo "::error::package.json is $v but the release is ${{ github.event.release.tag_name }}"; exit 1; }
+      - name: Publish
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            tag="$([ "${{ github.event.release.prerelease }}" = "true" ] && echo next || echo latest)"
+          else
+            tag="${{ inputs.tag }}"
+          fi
+          echo "publishing $(node -p "require('./package.json').name")@$(node -p "require('./package.json').version") as --tag $tag"
+          npm publish --access public --tag "$tag"
