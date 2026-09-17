@@ -1,0 +1,39 @@
+{
+  "name": "@getnoan/wizard",
+  "version": "0.1.0",
+  "description": "One command from nothing to a grounded agent: sign in to NOAN, wire your coding assistant, install the skill, and set up the agent pack.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "noan-wizard": "bin/wizard.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/getnoan/wizard.git"
+  },
+  "homepage": "https://getnoan.com/mcp",
+  "keywords": [
+    "noan",
+    "mcp",
+    "agent",
+    "skill",
+    "wizard",
+    "setup",
+    "fact-layer"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

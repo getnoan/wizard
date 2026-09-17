@@ -1,0 +1,20 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+permissions: { contents: read }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy: { matrix: { node: ["18", "20", "22"] } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ matrix.node }}" }
+      - run: node --test
+      - name: The help text prints, and a non-interactive run without a key exits 2 as documented
+        run: |
+          node bin/wizard.mjs --help | head -3
+          set +e; node bin/wizard.mjs --yes --dir . >/dev/null 2>&1; code=$?; set -e
+          echo "exit=$code"; test "$code" -eq 2
