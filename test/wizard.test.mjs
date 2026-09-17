@@ -7,7 +7,7 @@ import { parseArgs } from "../src/args.mjs";
 import { upsertEnv, writeEnv, ensureGitignored } from "../src/env-file.mjs";
 import { mergeJsonServer, mergeToml, wireClients } from "../src/clients.mjs";
 import { installSkill, writePointers, POINTER_MARK, fetchSkillFiles } from "../src/skill.mjs";
-import { parseSeedOutput } from "../src/agents.mjs";
+import { parseSeedOutput, parseGroundingOutput } from "../src/agents.mjs";
 import { classifyWorkspace, looksLikeKey } from "../src/noan.mjs";
 import { renderReport } from "../src/report.mjs";
 
@@ -109,4 +109,10 @@ test("skill fetch: the core skill is required, the capture skill is optional unt
   const r = await fetchSkillFiles(stub(u => u.includes("candidate-capture") ? 404 : 200));
   assert.equal(Object.keys(r.files).length, 4); assert.deepEqual(r.missing, ["noan-fact-candidate-capture/SKILL.md"]);
   await assert.rejects(fetchSkillFiles(stub(u => u.endsWith("SKILL.md") ? 404 : 200)), /could not fetch noan-fact-layer\/SKILL.md/);
+});
+
+test("grounding output: the last JSON line wins; noise before it is ignored", () => {
+  const r = parseGroundingOutput("grounding check — sales deck\n  · Brand Identity (brand-identity) EMPTY\n{\"agents\":[\"sales deck\"],\"gaps\":[{\"slug\":\"brand-identity\",\"title\":\"Brand Identity\",\"agents\":[\"sales deck\"]}],\"filed\":[{\"slug\":\"brand-identity\",\"action\":\"filed\",\"taskId\":\"t1\"}]}\n");
+  assert.equal(r.gaps[0].title, "Brand Identity"); assert.equal(r.filed[0].action, "filed");
+  assert.deepEqual(parseGroundingOutput("nothing json here\n"), { gaps: [], filed: [] });
 });

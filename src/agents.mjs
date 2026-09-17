@@ -86,6 +86,21 @@ export function runSeeds(dest, env, { dryRun = false } = {}) {
   return { slugs, rows };
 }
 
+/** The pack's grounding check: which blocks the agents read hold no fact. Runs in the clone; absent in an old pack. */
+export function runGroundingCheck(dest, env, { dryRun = false } = {}) {
+  const p = path.join(dest, "agents", "grounding-check.mjs");
+  if (!existsSync(p)) return { available: false };
+  const r = spawnSync(process.execPath, [p, "--json", ...(dryRun ? ["--dry-run"] : [])], { cwd: path.join(dest, "agents"), encoding: "utf8", env: { ...process.env, ...env } });
+  return { available: true, ...parseGroundingOutput(r.stdout), error: r.status === 0 ? undefined : (r.stderr || "").trim().split("\n").slice(-1)[0] };
+}
+export function parseGroundingOutput(text) {
+  for (const line of String(text || "").split("\n").reverse()) {
+    if (!line.trim().startsWith("{")) continue;
+    try { const j = JSON.parse(line); return { gaps: j.gaps || [], filed: j.filed || [] }; } catch {}
+  }
+  return { gaps: [], filed: [] };
+}
+
 export function dispatchDryRun(dest, workflow, dryRun) {
   if (dryRun) return { workflow, action: "would dispatch" };
   const r = gh(["workflow", "run", workflow, "-f", "dry_run=1"], { cwd: dest });
