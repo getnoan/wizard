@@ -2,7 +2,10 @@
  *  Off until a public project token is set here; off whenever the user says so. Never a key, never a path. */
 import { randomUUID } from "node:crypto";
 
-export const POSTHOG_TOKEN = "";   // public (write-only) PostHog project token, phc_…; empty = telemetry off
+// The public (write-only) project API key of PostHog project 52483 — the NOAN product project,
+// so the existing read key can query wizard_* events without a new credential. Safe to embed;
+// empty = telemetry off. PostHog → Settings → Project → Project API key, starts phc_.
+export const POSTHOG_TOKEN = "";
 const HOST = "https://us.i.posthog.com";
 const TIMEOUT_MS = 2000;           // a slow or blackholed endpoint must never hold up the wizard or its report
 const RUN_ID = randomUUID();       // this process only, never stored: pairs started with completed/cancelled
