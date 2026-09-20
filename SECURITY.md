@@ -13,9 +13,10 @@ what it does with that key, and what to do if you find a problem.
   stored as GitHub repository secrets through the GitHub CLI. This program never sees a GitHub
   token; `gh` holds it.
 - Telemetry is three counts (started, completed, cancelled) with the Node version and
-  platform, and is off until a public project token is set in `src/telemetry.mjs`. Never a key,
-  never a path, never a workspace name. `--no-telemetry` or `NOAN_WIZARD_NO_TELEMETRY=1` sends
-  nothing.
+  platform, sent only when a public write-only project token is compiled into
+  `src/telemetry.mjs`. Runs are identified by an id made up for that process and never stored,
+  so runs can be counted but not linked to each other or to you. Never a key, never a path,
+  never a workspace name. `--no-telemetry` or `NOAN_WIZARD_NO_TELEMETRY=1` sends nothing.
 - The skill files are fetched from `raw.githubusercontent.com/getnoan/skills` and copied, not
   executed.
 

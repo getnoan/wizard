@@ -10,6 +10,7 @@ import { installSkill, writePointers, POINTER_MARK, fetchSkillFiles } from "../s
 import { parseSeedOutput, parseGroundingOutput } from "../src/agents.mjs";
 import { classifyWorkspace, looksLikeKey } from "../src/noan.mjs";
 import { renderReport } from "../src/report.mjs";
+import { telemetryEnabled, capture, POSTHOG_TOKEN } from "../src/telemetry.mjs";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "wiz-"));
 
@@ -115,4 +116,16 @@ test("grounding output: the last JSON line wins; noise before it is ignored", ()
   const r = parseGroundingOutput("grounding check — sales deck\n  · Brand Identity (brand-identity) EMPTY\n{\"agents\":[\"sales deck\"],\"gaps\":[{\"slug\":\"brand-identity\",\"title\":\"Brand Identity\",\"agents\":[\"sales deck\"]}],\"filed\":[{\"slug\":\"brand-identity\",\"action\":\"filed\",\"taskId\":\"t1\"}]}\n");
   assert.equal(r.gaps[0].title, "Brand Identity"); assert.equal(r.filed[0].action, "filed");
   assert.deepEqual(parseGroundingOutput("nothing json here\n"), { gaps: [], filed: [] });
+});
+
+test("telemetry: either opt-out wins, and a disabled capture makes no request", async () => {
+  assert.equal(telemetryEnabled({ telemetry: false }), false);
+  process.env.NOAN_WIZARD_NO_TELEMETRY = "1";
+  assert.equal(telemetryEnabled({ telemetry: true }), false);
+  delete process.env.NOAN_WIZARD_NO_TELEMETRY;
+  assert.equal(telemetryEnabled({ telemetry: true }), !!POSTHOG_TOKEN);   // holds before and after a token is set
+  const real = globalThis.fetch; let called = false;
+  globalThis.fetch = async () => { called = true; throw new Error("telemetry must not reach the network here"); };
+  try { assert.equal(await capture({ telemetry: false }, "started"), false); assert.equal(called, false); }
+  finally { globalThis.fetch = real; }
 });

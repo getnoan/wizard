@@ -70,7 +70,9 @@ Exit codes: 0 done, 2 the key did not work, 3 cancelled, 1 anything else.
 ## Telemetry
 
 Three counts and nothing else: runs started, completed, cancelled, with the Node version and
-platform. Never a key, never a path, never a workspace name. Off with `--no-telemetry`.
+platform. A run carries an id made up for that process and never stored, so the three counts line
+up within a run and nothing links one run to the next. Never a key, never a path, never a
+workspace name. Off with `--no-telemetry`.
 
 ## Why a wizard and not a prompt
 
