@@ -7,7 +7,7 @@ import { parseArgs } from "../src/args.mjs";
 import { upsertEnv, writeEnv, ensureGitignored } from "../src/env-file.mjs";
 import { mergeJsonServer, mergeToml, wireClients } from "../src/clients.mjs";
 import { installSkill, writePointers, POINTER_MARK, fetchSkillFiles } from "../src/skill.mjs";
-import { parseSeedOutput, parseGroundingOutput } from "../src/agents.mjs";
+import { parseSeedOutput, parseGroundingOutput, agentIdentity, PACK_VARS } from "../src/agents.mjs";
 import { classifyWorkspace, looksLikeKey } from "../src/noan.mjs";
 import { renderReport } from "../src/report.mjs";
 import { telemetryEnabled, capture, POSTHOG_TOKEN } from "../src/telemetry.mjs";
@@ -116,6 +116,26 @@ test("grounding output: the last JSON line wins; noise before it is ignored", ()
   const r = parseGroundingOutput("grounding check — sales deck\n  · Brand Identity (brand-identity) EMPTY\n{\"agents\":[\"sales deck\"],\"gaps\":[{\"slug\":\"brand-identity\",\"title\":\"Brand Identity\",\"agents\":[\"sales deck\"]}],\"filed\":[{\"slug\":\"brand-identity\",\"action\":\"filed\",\"taskId\":\"t1\"}]}\n");
   assert.equal(r.gaps[0].title, "Brand Identity"); assert.equal(r.filed[0].action, "filed");
   assert.deepEqual(parseGroundingOutput("nothing json here\n"), { gaps: [], filed: [] });
+});
+
+test("agent identity: Verity is the default, a chosen name is kept, pronouns are never assumed for it", () => {
+  // The whole point of the prompt: an unset AGENT_NAME used to reach the pack as nothing,
+  // and the pack signs as "Agent". A skipped prompt must still send a real name.
+  assert.deepEqual(agentIdentity(), { AGENT_NAME: "Verity", AGENT_PRONOUNS: "she/her" });
+  assert.deepEqual(agentIdentity({ name: "  " }), { AGENT_NAME: "Verity", AGENT_PRONOUNS: "she/her" });
+  assert.deepEqual(agentIdentity({ name: "verity" }), { AGENT_NAME: "verity", AGENT_PRONOUNS: "she/her" });
+  // Someone else's name: no pronouns invented for it, so the pack falls back to they/them.
+  assert.deepEqual(agentIdentity({ name: "Atlas" }), { AGENT_NAME: "Atlas" });
+  assert.deepEqual(agentIdentity({ name: "Atlas", pronouns: "he/him" }), { AGENT_NAME: "Atlas", AGENT_PRONOUNS: "he/him" });
+  assert.deepEqual(agentIdentity({ name: " Atlas ", pronouns: "  " }), { AGENT_NAME: "Atlas" });
+  // Both keys are variables the pack actually reads, so a rename upstream must fail here.
+  assert.ok(PACK_VARS.includes("AGENT_NAME"));
+});
+
+test("report: the agents line names the agent, so a run says who it just set up", () => {
+  const line = renderReport({ steps: { agents: { ok: true, repo: "me/agent-pack", agentName: "Atlas", secrets: [1, 2], variables: [1] } } })
+    .split("\n").find(l => l.startsWith("agents:"));
+  assert.match(line, /me\/agent-pack — Atlas, 2 secrets, 1 variables, safe mode on/);
 });
 
 test("telemetry: every opt-out wins, and a disabled capture makes no request", async () => {

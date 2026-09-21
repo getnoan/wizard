@@ -119,11 +119,17 @@ async function setupAgents({ args, ui, dir, key, me, report }) {
   const mailFrom = process.env.MAIL_FROM || (ui.interactive ? await ui.ask("Sender for the agents' mail, e.g. Agent <agent@yourdomain.com> (a domain verified in Resend)") : "");
   const replyTo = process.env.REPLY_TO || (ui.interactive ? await ui.ask("Reply-to address (a mailbox someone reads)", { dflt: mailFrom.replace(/^.*<|>.*$/g, "") }) : "");
   const escalateTo = process.env.ESCALATE_TO || (ui.interactive ? await ui.ask("Where the support agent escalates when it cannot answer") : "");
+  const askedName = process.env.AGENT_NAME || (ui.interactive ? await ui.ask("What should your agent be called?", { dflt: "Verity" }) : "");
+  const identity = pack.agentIdentity({ name: askedName, pronouns: process.env.AGENT_PRONOUNS
+    || (ui.interactive && askedName && askedName.toLowerCase() !== "verity"
+        ? await ui.ask(`Pronouns for ${askedName}, in ${askedName}'s own prose (blank for they/them)`)
+        : "") });
 
   const secrets = { NOAN_PERSONAL_API_KEY: key, ...(anthropic && { ANTHROPIC_API_KEY: anthropic }), ...(resend && { RESEND_API_KEY: resend }),
                     ...(db && { DATABASE_URL: db }), ...(firecrawl && { FIRECRAWL_API_KEY: firecrawl }), NEWSLETTER_UNSUB_SECRET: pack.randomSecret() };
   for (const [n, v] of Object.entries(secrets)) { const r = pack.setSecret(fork.dest, n, v, args.dryRun); out.secrets.push(r); ui.ok(`secret ${n}: ${r.action}${r.error ? ` — ${r.error}` : ""}`); }
   const vars = { DRY_RUN: "1", STATE_BACKEND: db ? "postgres" : "local", ...(mailFrom && { MAIL_FROM: mailFrom }), ...(replyTo && { REPLY_TO: replyTo }), ...(escalateTo && { ESCALATE_TO: escalateTo }),
+                 ...identity,
                  COMPANY_NAME: me.project?.name || "", ...(me.identity?.id && { AGENT_IDENTITY_IDS: me.identity.id }), ...(me.identity?.email && { COMMANDERS: me.identity.email }) };
   // The seeds need the key in the clone's .env; the pack's own .env.example documents the rest.
   pack.writePackEnv(fork.dest, { NOAN_PERSONAL_API_KEY: key, ...(anthropic && { ANTHROPIC_API_KEY: anthropic }), ...(resend && { RESEND_API_KEY: resend }) }, args.dryRun);
@@ -155,5 +161,6 @@ async function setupAgents({ args, ui, dir, key, me, report }) {
     ui.ok(`${wf}: ${d.action}${d.error ? ` — ${d.error}` : ""} — read it under Actions, then set DRY_RUN=0 for the agents you trust`);
   }
   out.repo = pack.repoSlug(fork.dest);
+  out.agentName = identity.AGENT_NAME;
   return out;
 }

@@ -30,11 +30,12 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
 4. **Your fact layer.** If the workspace holds fewer than ten facts, the wizard does not guess
    facts for you. It hands the seeding to your assistant, which has the procedure from the skill:
    read your website, repo and docs, propose a structure, and write only after you say yes.
-5. **The agent pack** (optional, `--agents`). Forks [getnoan/agent-pack](https://github.com/getnoan/agent-pack)
+5. **The agent pack** (optional, `--agents`). Asks what to call your agent — Verity by default, the
+   name she answers to in NOAN — then forks [getnoan/agent-pack](https://github.com/getnoan/agent-pack)
    to your account, verifies and stores your Anthropic and Resend keys (and optionally a Postgres URL
    and a Firecrawl key) as repository secrets, runs the pack's seed scripts so each agent's starting
-   instructions are in your workspace, records the block slugs as repository variables, and triggers
-   one dry run. Safe mode stays on: the wizard never sets `DRY_RUN` to 0. That switch is yours.
+   instructions are in your workspace, records the name and the block slugs as repository variables,
+   and triggers one dry run. Safe mode stays on: the wizard never sets `DRY_RUN` to 0. That switch is yours.
 6. **The report.** What happened, and the one thing to do next.
 
 ## For a coding assistant
