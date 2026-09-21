@@ -152,7 +152,10 @@ test("telemetry: the request is abortable, and every event of one run shares its
     globalThis.fetch = (_url, opts = {}) => {                       // never settles on its own
       sawSignal = opts.signal instanceof AbortSignal;
       if (!sawSignal) return Promise.reject(new Error("no signal"));   // fail fast rather than hang the suite
-      return new Promise((_res, rej) => opts.signal.addEventListener("abort", () => rej(opts.signal.reason)));
+      return new Promise((_res, rej) => {                             // a ref'd timer: AbortSignal.timeout's own
+        const alive = setTimeout(() => rej(new Error("the stub outlived the abort")), 30_000);   // is unref'd and
+        opts.signal.addEventListener("abort", () => { clearTimeout(alive); rej(opts.signal.reason); });  // would
+      });                                                             // let an otherwise idle event loop drain
     };
     const t0 = Date.now();
     assert.equal(await capture({}, "started"), false);              // the timeout, not the OS, ends this
