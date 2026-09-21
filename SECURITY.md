@@ -12,11 +12,15 @@ what it does with that key, and what to do if you find a problem.
 - Third-party keys for the agent pack (`--agents`) are verified against their own services and
   stored as GitHub repository secrets through the GitHub CLI. This program never sees a GitHub
   token; `gh` holds it.
-- Telemetry is three counts (started, completed, cancelled) with the Node version and
-  platform, sent only when a public write-only project token is compiled into
-  `src/telemetry.mjs`. Runs are identified by an id made up for that process and never stored,
-  so runs can be counted but not linked to each other or to you. Never a key, never a path,
-  never a workspace name. `--no-telemetry` or `NOAN_WIZARD_NO_TELEMETRY=1` sends nothing.
+- Telemetry is three events (a run started, then completed or cancelled) carrying the Node
+  version, the platform, the exit code, the duration, whether the run was non-interactive,
+  whether the report was JSON, and whether the workspace was empty. Never a key, never a path,
+  never a workspace name, never anything read out of the fact layer. A run is identified by an
+  id made up for that process and thrown away with it, and the events ask PostHog for no person
+  profile and no geolocation — but, like any HTTP request, they arrive from the sender's IP
+  address, which is stored on the event unless the receiving project discards client IPs.
+  Nothing is sent when `--no-telemetry` is passed, when `NOAN_WIZARD_NO_TELEMETRY` or
+  `DO_NOT_TRACK` is set to anything but `0` or `false`, or when `CI` is set.
 - The skill files are fetched from `raw.githubusercontent.com/getnoan/skills` and copied, not
   executed.
 
