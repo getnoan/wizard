@@ -34,6 +34,18 @@ export function parseSeedOutput(text) {
 export const PACK_SECRETS = ["NOAN_PERSONAL_API_KEY", "RESEND_API_KEY", "ANTHROPIC_API_KEY", "DATABASE_URL", "FIRECRAWL_API_KEY", "NEWSLETTER_UNSUB_SECRET"];
 export const PACK_VARS = ["MAIL_FROM", "REPLY_TO", "ESCALATE_TO", "STATE_BACKEND", "AGENT_NAME", "COMPANY_NAME", "AGENT_IDENTITY_IDS", "COMMANDERS", "REPORT_RECIPIENT_TAG"];
 
+/** What the agents call themselves, and how their own prose refers to them.
+ *  Verity is the default because that is the agent people meet in NOAN; anyone who
+ *  wants their own name says so and gets it. Unset, the pack signs as "Agent", which
+ *  is nobody, so the wizard always sends a name.
+ *  Pronouns default to she/her only for Verity: assuming them for a name someone
+ *  else chose is worse than the pack's own neutral fallback (they/them). */
+export function agentIdentity({ name, pronouns } = {}) {
+  const n = String(name ?? "").trim() || "Verity";
+  const p = String(pronouns ?? "").trim() || (n.toLowerCase() === "verity" ? "she/her" : "");
+  return { AGENT_NAME: n, ...(p && { AGENT_PRONOUNS: p }) };
+}
+
 export async function verifyAnthropic(key) {
   try { const r = await fetch("https://api.anthropic.com/v1/models", { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" } }); return r.status === 200; } catch { return false; }
 }

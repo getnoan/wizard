@@ -7,9 +7,10 @@ import { parseArgs } from "../src/args.mjs";
 import { upsertEnv, writeEnv, ensureGitignored } from "../src/env-file.mjs";
 import { mergeJsonServer, mergeToml, wireClients } from "../src/clients.mjs";
 import { installSkill, writePointers, POINTER_MARK, fetchSkillFiles } from "../src/skill.mjs";
-import { parseSeedOutput, parseGroundingOutput } from "../src/agents.mjs";
+import { parseSeedOutput, parseGroundingOutput, agentIdentity, PACK_VARS } from "../src/agents.mjs";
 import { classifyWorkspace, looksLikeKey } from "../src/noan.mjs";
 import { renderReport } from "../src/report.mjs";
+import { telemetryEnabled, capture, POSTHOG_TOKEN } from "../src/telemetry.mjs";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "wiz-"));
 
@@ -115,4 +116,77 @@ test("grounding output: the last JSON line wins; noise before it is ignored", ()
   const r = parseGroundingOutput("grounding check — sales deck\n  · Brand Identity (brand-identity) EMPTY\n{\"agents\":[\"sales deck\"],\"gaps\":[{\"slug\":\"brand-identity\",\"title\":\"Brand Identity\",\"agents\":[\"sales deck\"]}],\"filed\":[{\"slug\":\"brand-identity\",\"action\":\"filed\",\"taskId\":\"t1\"}]}\n");
   assert.equal(r.gaps[0].title, "Brand Identity"); assert.equal(r.filed[0].action, "filed");
   assert.deepEqual(parseGroundingOutput("nothing json here\n"), { gaps: [], filed: [] });
+});
+
+test("agent identity: Verity is the default, a chosen name is kept, pronouns are never assumed for it", () => {
+  // The whole point of the prompt: an unset AGENT_NAME used to reach the pack as nothing,
+  // and the pack signs as "Agent". A skipped prompt must still send a real name.
+  assert.deepEqual(agentIdentity(), { AGENT_NAME: "Verity", AGENT_PRONOUNS: "she/her" });
+  assert.deepEqual(agentIdentity({ name: "  " }), { AGENT_NAME: "Verity", AGENT_PRONOUNS: "she/her" });
+  assert.deepEqual(agentIdentity({ name: "verity" }), { AGENT_NAME: "verity", AGENT_PRONOUNS: "she/her" });
+  // Someone else's name: no pronouns invented for it, so the pack falls back to they/them.
+  assert.deepEqual(agentIdentity({ name: "Atlas" }), { AGENT_NAME: "Atlas" });
+  assert.deepEqual(agentIdentity({ name: "Atlas", pronouns: "he/him" }), { AGENT_NAME: "Atlas", AGENT_PRONOUNS: "he/him" });
+  assert.deepEqual(agentIdentity({ name: " Atlas ", pronouns: "  " }), { AGENT_NAME: "Atlas" });
+  // Both keys are variables the pack actually reads, so a rename upstream must fail here.
+  assert.ok(PACK_VARS.includes("AGENT_NAME"));
+});
+
+test("report: the agents line names the agent, so a run says who it just set up", () => {
+  const line = renderReport({ steps: { agents: { ok: true, repo: "me/agent-pack", agentName: "Atlas", secrets: [1, 2], variables: [1] } } })
+    .split("\n").find(l => l.startsWith("agents:"));
+  assert.match(line, /me\/agent-pack — Atlas, 2 secrets, 1 variables, safe mode on/);
+});
+
+test("telemetry: every opt-out wins, and a disabled capture makes no request", async () => {
+  const saved = { ci: process.env.CI, no: process.env.NOAN_WIZARD_NO_TELEMETRY, dnt: process.env.DO_NOT_TRACK };
+  const restore = () => { for (const [k, v] of [["CI", saved.ci], ["NOAN_WIZARD_NO_TELEMETRY", saved.no], ["DO_NOT_TRACK", saved.dnt]])
+    v === undefined ? delete process.env[k] : (process.env[k] = v); };
+  delete process.env.CI; delete process.env.NOAN_WIZARD_NO_TELEMETRY; delete process.env.DO_NOT_TRACK;
+  try {
+    assert.equal(telemetryEnabled({ telemetry: false }), false);
+    for (const [k, v] of [["NOAN_WIZARD_NO_TELEMETRY", "1"], ["NOAN_WIZARD_NO_TELEMETRY", "true"], ["NOAN_WIZARD_NO_TELEMETRY", "yes"],
+                          ["DO_NOT_TRACK", "1"], ["CI", "true"], ["CI", "1"]]) {
+      process.env[k] = v;
+      assert.equal(telemetryEnabled({ telemetry: true }), false, `${k}=${v} should opt out`);
+      delete process.env[k];
+    }
+    for (const v of ["0", "false", ""]) {   // these are not an opt-out
+      process.env.NOAN_WIZARD_NO_TELEMETRY = v;
+      assert.equal(telemetryEnabled({ telemetry: true }), !!POSTHOG_TOKEN, `NOAN_WIZARD_NO_TELEMETRY=${v} should not opt out`);
+      delete process.env.NOAN_WIZARD_NO_TELEMETRY;
+    }
+    const real = globalThis.fetch; let called = false;
+    globalThis.fetch = async () => { called = true; throw new Error("telemetry must not reach the network here"); };
+    try { assert.equal(await capture({ telemetry: false }, "started"), false); assert.equal(called, false); }
+    finally { globalThis.fetch = real; }
+  } finally { restore(); }
+});
+
+test("telemetry: the request is abortable, and every event of one run shares its id", async () => {
+  const saved = { ci: process.env.CI }; delete process.env.CI;
+  const real = globalThis.fetch;
+  try {
+    if (!POSTHOG_TOKEN) { assert.equal(await capture({}, "started"), false); return; }   // nothing compiled in: nothing to test
+    let sawSignal = false;
+    globalThis.fetch = (_url, opts = {}) => {                       // never settles on its own
+      sawSignal = opts.signal instanceof AbortSignal;
+      if (!sawSignal) return Promise.reject(new Error("no signal"));   // fail fast rather than hang the suite
+      return new Promise((_res, rej) => {                             // a ref'd timer: AbortSignal.timeout's own
+        const alive = setTimeout(() => rej(new Error("the stub outlived the abort")), 30_000);   // is unref'd and
+        opts.signal.addEventListener("abort", () => { clearTimeout(alive); rej(opts.signal.reason); });  // would
+      });                                                             // let an otherwise idle event loop drain
+    };
+    const t0 = Date.now();
+    assert.equal(await capture({}, "started"), false);              // the timeout, not the OS, ends this
+    assert.equal(sawSignal, true, "capture must pass an AbortSignal");
+    assert.ok(Date.now() - t0 < 10_000, "capture must not wait on the OS TCP timeout");
+
+    const ids = [];
+    globalThis.fetch = async (_url, opts) => { ids.push(JSON.parse(opts.body).distinct_id); return { ok: true }; };
+    await capture({}, "started"); await capture({}, "completed", { exit: 0 });
+    assert.equal(ids.length, 2);
+    assert.match(ids[0], /^[0-9a-f]{8}-[0-9a-f]{4}-/);
+    assert.equal(ids[0], ids[1], "the two events of one run must share a distinct_id");
+  } finally { globalThis.fetch = real; saved.ci === undefined ? delete process.env.CI : (process.env.CI = saved.ci); }
 });

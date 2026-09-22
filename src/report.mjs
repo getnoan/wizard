@@ -14,7 +14,7 @@ export function renderReport(report, { json = false } = {}) {
   }
   if (s.skill?.rows) L.push(`skill: ${s.skill.rows.map(r => `${r.id} (${r.written} written)`).join(" · ")}; pointers: ${s.skill.pointers.map(p => p.action).join(", ")}`);
   if (s.workspace) L.push(`facts: ${s.workspace.count ?? "?"} (${s.workspace.state})`);
-  if (s.agents && !s.agents.skipped) L.push(s.agents.ok ? `agents: ${s.agents.repo || s.agents.dest} — ${s.agents.secrets.length} secrets, ${s.agents.variables.length} variables, safe mode on` : `agents: not set up (${s.agents.reason})`);
+  if (s.agents && !s.agents.skipped) L.push(s.agents.ok ? `agents: ${s.agents.repo || s.agents.dest} — ${s.agents.agentName || "your agent"}, ${s.agents.secrets.length} secrets, ${s.agents.variables.length} variables, safe mode on` : `agents: not set up (${s.agents.reason})`);
   if (report.next?.length) { L.push("", "──────── next ────────"); for (const n of report.next) L.push(`• ${n.say}${n.why ? `  (${n.why})` : ""}`); }
   L.push("");
   return L.join("\n");

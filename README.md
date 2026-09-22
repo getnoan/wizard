@@ -30,11 +30,12 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
 4. **Your fact layer.** If the workspace holds fewer than ten facts, the wizard does not guess
    facts for you. It hands the seeding to your assistant, which has the procedure from the skill:
    read your website, repo and docs, propose a structure, and write only after you say yes.
-5. **The agent pack** (optional, `--agents`). Forks [getnoan/agent-pack](https://github.com/getnoan/agent-pack)
+5. **The agent pack** (optional, `--agents`). Asks what to call your agent — Verity by default, the
+   name she answers to in NOAN — then forks [getnoan/agent-pack](https://github.com/getnoan/agent-pack)
    to your account, verifies and stores your Anthropic and Resend keys (and optionally a Postgres URL
    and a Firecrawl key) as repository secrets, runs the pack's seed scripts so each agent's starting
-   instructions are in your workspace, records the block slugs as repository variables, and triggers
-   one dry run. Safe mode stays on: the wizard never sets `DRY_RUN` to 0. That switch is yours.
+   instructions are in your workspace, records the name and the block slugs as repository variables,
+   and triggers one dry run. Safe mode stays on: the wizard never sets `DRY_RUN` to 0. That switch is yours.
 6. **The report.** What happened, and the one thing to do next.
 
 ## For a coding assistant
@@ -65,12 +66,22 @@ Exit codes: 0 done, 2 the key did not work, 3 cancelled, 1 anything else.
 | `--agents` / `--no-agents` | include or skip the agent pack step |
 | `--no-mcp`, `--no-skill` | skip a step |
 | `--dry-run` | show every write without making it |
-| `--no-telemetry` | send nothing about this run (also `NOAN_WIZARD_NO_TELEMETRY=1`) |
+| `--no-telemetry` | send nothing about this run (also `NOAN_WIZARD_NO_TELEMETRY`, `DO_NOT_TRACK`, or any `CI`) |
 
 ## Telemetry
 
-Three counts and nothing else: runs started, completed, cancelled, with the Node version and
-platform. Never a key, never a path, never a workspace name. Off with `--no-telemetry`.
+Three events — a run started, and then completed or cancelled — carrying the Node version, the
+platform, the exit code, how long the run took, whether it was non-interactive (`--yes`), whether
+the report was JSON, and whether the workspace was empty. That is the whole payload. Never a key,
+never a path, never a workspace name, never anything read out of your fact layer.
+
+A run is identified by an id made up for that process and thrown away with it, so the events of one
+run line up and nothing links one run to the next. The events ask PostHog for no person profile and
+no geolocation. Like any HTTP request they arrive from your IP address.
+
+Nothing is sent when any of these is true: `--no-telemetry`, `NOAN_WIZARD_NO_TELEMETRY` set to
+anything but `0` or `false`, `DO_NOT_TRACK` likewise, or `CI` set — a pipeline running the wizard
+is not a person trying it.
 
 ## Why a wizard and not a prompt
 
