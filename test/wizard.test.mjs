@@ -182,11 +182,24 @@ test("telemetry: the request is abortable, and every event of one run shares its
     assert.equal(sawSignal, true, "capture must pass an AbortSignal");
     assert.ok(Date.now() - t0 < 10_000, "capture must not wait on the OS TCP timeout");
 
-    const ids = [];
-    globalThis.fetch = async (_url, opts) => { ids.push(JSON.parse(opts.body).distinct_id); return { ok: true }; };
-    await capture({}, "started"); await capture({}, "completed", { exit: 0 });
-    assert.equal(ids.length, 2);
+    const sent = [];
+    globalThis.fetch = async (_url, opts) => { sent.push(JSON.parse(opts.body)); return { ok: true }; };
+    await capture({}, "started"); await capture({}, "completed", { exit: 0, ms: 12 });
+    assert.equal(sent.length, 2);
+    const ids = sent.map((b) => b.distinct_id);
     assert.match(ids[0], /^[0-9a-f]{8}-[0-9a-f]{4}-/);
     assert.equal(ids[0], ids[1], "the two events of one run must share a distinct_id");
+
+    // The two privacy promises README and SECURITY.md make, which nothing tested: no person
+    // profile, and no geolocation. Both are one deleted line away from being quietly untrue.
+    for (const b of sent) {
+      assert.equal(b.properties.$process_person_profile, false, "the events must not build a person profile");
+      assert.equal(b.properties.$geoip_disable, true, "the events must ask PostHog not to geolocate");
+    }
+    // And the payload is only what the docs list — a new property carrying a path or a
+    // workspace name would otherwise ship silently.
+    const allowed = new Set(["$process_person_profile", "$geoip_disable", "node", "platform", "yes", "json", "exit", "ms", "empty"]);
+    for (const b of sent) for (const k of Object.keys(b.properties))
+      assert.ok(allowed.has(k), `undocumented telemetry property: ${k}`);
   } finally { globalThis.fetch = real; saved.ci === undefined ? delete process.env.CI : (process.env.CI = saved.ci); }
 });
