@@ -10,7 +10,7 @@ import { installSkill, writePointers, POINTER_MARK, fetchSkillFiles } from "../s
 import { parseSeedOutput, parseGroundingOutput, agentIdentity, PACK_VARS } from "../src/agents.mjs";
 import { classifyWorkspace, looksLikeKey } from "../src/noan.mjs";
 import { renderReport } from "../src/report.mjs";
-import { telemetryEnabled, capture, POSTHOG_TOKEN } from "../src/telemetry.mjs";
+import { telemetryEnabled, capture, POSTHOG_TOKEN, ALLOWED_PROPERTIES } from "../src/telemetry.mjs";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "wiz-"));
 
@@ -198,8 +198,18 @@ test("telemetry: the request is abortable, and every event of one run shares its
     }
     // And the payload is only what the docs list — a new property carrying a path or a
     // workspace name would otherwise ship silently.
-    const allowed = new Set(["$process_person_profile", "$geoip_disable", "node", "platform", "yes", "json", "exit", "ms", "empty"]);
     for (const b of sent) for (const k of Object.keys(b.properties))
-      assert.ok(allowed.has(k), `undocumented telemetry property: ${k}`);
+      assert.ok(ALLOWED_PROPERTIES.has(k), `undocumented telemetry property: ${k}`);
+    assert.deepEqual([...ALLOWED_PROPERTIES].sort(),
+      ["$geoip_disable", "$process_person_profile", "empty", "exit", "json", "ms", "node", "platform", "yes"],
+      "the allowlist and the documented payload must stay the same list");
+
+    // A caller cannot widen it. run.mjs passes exit/ms/empty today, but the guard has to hold
+    // for whatever any future call site passes — a project path is the promise this protects.
+    sent.length = 0;
+    await capture({}, "completed", { exit: 0, dir: "/Users/someone/secret-project", workspace: "acme" });
+    assert.equal(sent[0].properties.exit, 0, "a documented property must survive");
+    assert.equal("dir" in sent[0].properties, false, "a caller must not be able to send a path");
+    assert.equal("workspace" in sent[0].properties, false, "a caller must not be able to send a workspace name");
   } finally { globalThis.fetch = real; saved.ci === undefined ? delete process.env.CI : (process.env.CI = saved.ci); }
 });
