@@ -31,8 +31,24 @@ export function parseSeedOutput(text) {
 }
 
 /** The secrets and variables the pack documents, and which are required for which agent. */
-export const PACK_SECRETS = ["NOAN_PERSONAL_API_KEY", "RESEND_API_KEY", "ANTHROPIC_API_KEY", "DATABASE_URL", "FIRECRAWL_API_KEY", "NEWSLETTER_UNSUB_SECRET"];
-export const PACK_VARS = ["MAIL_FROM", "REPLY_TO", "ESCALATE_TO", "STATE_BACKEND", "AGENT_NAME", "COMPANY_NAME", "AGENT_IDENTITY_IDS", "COMMANDERS", "REPORT_RECIPIENT_TAG"];
+/** LLM_API_KEY is an ALTERNATIVE to ANTHROPIC_API_KEY, not an addition: the pack accepts either
+ *  name for the model key and one of the two is required. It is listed so a caller enumerating
+ *  the pack's secrets knows the name exists, not so anyone sets both. */
+export const PACK_SECRETS = ["NOAN_PERSONAL_API_KEY", "RESEND_API_KEY", "ANTHROPIC_API_KEY", "LLM_API_KEY", "DATABASE_URL", "FIRECRAWL_API_KEY", "NEWSLETTER_UNSUB_SECRET"];
+export const PACK_VARS = ["MAIL_FROM", "REPLY_TO", "ESCALATE_TO", "STATE_BACKEND", "ANTHROPIC_BASE_URL", "AGENT_NAME", "COMPANY_NAME", "AGENT_IDENTITY_IDS", "COMMANDERS", "REPORT_RECIPIENT_TAG"];
+
+/** The pack's model endpoint, from the same variable the pack itself reads. Bare base, no
+ *  trailing slash; empty string means the default vendor. */
+export function modelBase(env = process.env) {
+  const raw = (env.ANTHROPIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (!raw) return "";
+  try { new URL(raw); } catch { return ""; }
+  return raw;
+}
+export const DEFAULT_MODEL_BASE = "https://api.anthropic.com";
+/** Which secret name the model key is STORED under: the neutral one once an endpoint is set,
+ *  because "ANTHROPIC_API_KEY" holding an OpenRouter key is a lie the next reader has to unpick. */
+export const modelKeyName = (env = process.env) => (modelBase(env) ? "LLM_API_KEY" : "ANTHROPIC_API_KEY");
 
 /** What the agents call themselves, and how their own prose refers to them.
  *  Verity is the default because that is the agent people meet in NOAN; anyone who
@@ -46,9 +62,23 @@ export function agentIdentity({ name, pronouns } = {}) {
   return { AGENT_NAME: n, ...(p && { AGENT_PRONOUNS: p }) };
 }
 
-export async function verifyAnthropic(key) {
-  try { const r = await fetch("https://api.anthropic.com/v1/models", { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" } }); return r.status === 200; } catch { return false; }
+/** Verify the model key against the endpoint that will actually be called.
+ *
+ *  Against the default vendor this is a straight yes/no. Against a configured endpoint it is
+ *  advisory: `/v1/models` is not part of the Messages contract, so a gateway may not implement
+ *  it, and a 404 there says nothing about the key. Returning "unknown" rather than false is the
+ *  point — the previous behaviour verified every key against the vendor's own host, so a valid
+ *  gateway key came back 401 and was DISCARDED with "not accepted by its service". */
+export async function verifyModelKey(key, base = "") {
+  const root = base || DEFAULT_MODEL_BASE;
+  try {
+    const r = await fetch(`${root}/v1/models`, { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" } });
+    if (r.status === 200) return true;
+    // Only the vendor's own host is trusted to mean "this key is bad".
+    return base ? "unknown" : false;
+  } catch { return base ? "unknown" : false; }
 }
+export const verifyAnthropic = (key) => verifyModelKey(key, "");
 export async function verifyResend(key) {
   try { const r = await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${key}` } }); return r.status === 200; } catch { return false; }
 }
