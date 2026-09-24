@@ -312,3 +312,84 @@ test("pack files: a name the layout does not list falls back to agents/; an unre
   writeFileSync(path.join(d, "agents", "pack-layout.json"), "{ not json");
   assert.throws(() => packFile(d, "seed-deck.mjs"), /pack-layout\.json .* not readable JSON/);
 });
+
+/* ---------------- the web agents (src/web.mjs) ---------------- */
+import { WEB_AGENTS, runWebSeeds, proveLocally, webEnv, writeWebEnv, webNext, renderDeployUrl } from "../src/web.mjs";
+
+test("args: --meetings / --chat and their --no- forms; unset means ask (or skip under --yes)", () => {
+  const a = parseArgs(["--meetings", "--no-chat"]);
+  assert.equal(a.meetings, true); assert.equal(a.chat, false);
+  const b = parseArgs([]); assert.equal(b.meetings, null); assert.equal(b.chat, null);
+});
+
+function fakeWebRepo() {
+  const d = tmp(); mkdirSync(path.join(d, "agents"), { recursive: true }); mkdirSync(path.join(d, ".git"));
+  writeFileSync(path.join(d, "agents", "seed-a.mjs"), `console.log("created"); console.log("\\nAdd to your deploy env:\\nA_BLOCK_SLUG=slug-a");\n`);
+  writeFileSync(path.join(d, "agents", "seed-b.mjs"), `console.error("seed failed: nope"); process.exit(1);\n`);
+  return d;
+}
+
+test("web seeds: slugs parsed from each seed, a failure reported with its last line, a missing seed named", () => {
+  const d = fakeWebRepo();
+  const agent = { seeds: ["agents/seed-a.mjs", "agents/seed-b.mjs", "agents/seed-gone.mjs"] };
+  const { slugs, rows } = runWebSeeds(d, agent, {});
+  assert.deepEqual(slugs, { A_BLOCK_SLUG: "slug-a" });
+  assert.deepEqual(rows.map(r => r.action), ["ran", "failed", "missing"]);
+  assert.match(rows[1].error, /seed failed: nope/);
+  assert.deepEqual(runWebSeeds(d, agent, {}, { dryRun: true }).rows.map(r => r.action), ["would run", "would run", "missing"]);
+});
+
+test("web local proof: a service that answers passes; one that dies says why; the child never sees the wizard's keys", async () => {
+  const d = tmp();
+  writeFileSync(path.join(d, "srv.mjs"), `import { createServer } from "node:http";
+const port = Number(process.env.PORT);
+createServer((q, r) => { if (q.url === "/leak") return r.end(String(process.env.NOAN_API_KEY || "")); r.end(q.url === "/healthz" || q.url === "/page" ? "ok" : ""); }).listen(port, "127.0.0.1");\n`);
+  writeFileSync(path.join(d, "dies.mjs"), `console.error("boom: no config"); process.exit(3);\n`);
+  process.env.NOAN_API_KEY = "npak_must_not_reach_the_child";
+  try {
+    let leaked = null;
+    const good = { boot: (port) => ({ args: ["srv.mjs"], env: { PORT: String(port) } }), probe: ["/healthz", "/page"] };
+    const r = await proveLocally(d, good, { fetchImpl: async (u, o) => { const res = await fetch(u, o); if (u.endsWith("/page")) leaked = await (await fetch(u.replace("/page", "/leak"))).text(); return res; } });
+    assert.equal(r.ok, true);
+    assert.equal(leaked, "", "the service must not inherit the wizard's environment");
+    const bad = await proveLocally(d, { boot: () => ({ args: ["dies.mjs"], env: {} }), probe: ["/healthz"] }, { timeoutMs: 4000 });
+    assert.equal(bad.ok, false); assert.match(bad.reason, /exited \(3\): boom: no config/);
+  } finally { delete process.env.NOAN_API_KEY; }
+});
+
+test("web env: never the personal NOAN key; the chat's model key under the endpoint's name; a SESSION_SECRET survives a re-run", () => {
+  const chat = webEnv(WEB_AGENTS.chat, { slugs: { SITE_CHAT_CONFIG_BLOCK_SLUG: "s" }, company: "Acme", agentName: "Verity", modelKey: "k", modelKeyName: "LLM_API_KEY", modelBase: "https://openrouter.ai/api" });
+  assert.equal(chat.LLM_API_KEY, "k"); assert.equal(chat.ANTHROPIC_BASE_URL, "https://openrouter.ai/api"); assert.ok(!("ANTHROPIC_API_KEY" in chat));
+  assert.match(chat.SESSION_SECRET, /^[0-9a-f]{48}$/);
+  for (const e of [chat, webEnv(WEB_AGENTS.meetings, { modelKey: "k" })]) {
+    assert.ok(!Object.keys(e).some(k => /NOAN_(API|PERSONAL|AGENT)/.test(k)), "no NOAN key of any name");
+  }
+  assert.ok(!("ANTHROPIC_API_KEY" in webEnv(WEB_AGENTS.meetings, { modelKey: "k" })), "meetings needs no model key");
+
+  const d = tmp(); mkdirSync(path.join(d, ".git"));
+  const first = writeWebEnv(d, webEnv(WEB_AGENTS.chat, { company: "Acme" }));
+  assert.equal(first.gitignore, "added .env");
+  const secret = readFileSync(path.join(d, ".env"), "utf8").match(/^SESSION_SECRET=(.+)$/m)[1];
+  const again = writeWebEnv(d, webEnv(WEB_AGENTS.chat, { company: "Acme" }));
+  assert.ok(!again.keys.includes("SESSION_SECRET"));
+  assert.equal(readFileSync(path.join(d, ".env"), "utf8").match(/^SESSION_SECRET=(.+)$/m)[1], secret, "a deployed chat's visitors stay signed in");
+  assert.equal(again.gitignore, "already ignored");
+});
+
+test("web hand-off: names the remaining INSTALL steps, the deploy link, and a key made for the service", () => {
+  assert.equal(renderDeployUrl("me/verity-chat"), "https://render.com/deploy?repo=https://github.com/me/verity-chat");
+  assert.equal(renderDeployUrl(null), null);
+  const n = webNext(WEB_AGENTS.chat, { dest: "/x/verity-chat", deployUrl: renderDeployUrl("me/verity-chat") });
+  assert.match(n.say, /INSTALL\.md step 3/); assert.match(n.say, /render\.com\/deploy/); assert.match(n.say, /not your personal key/);
+  const text = renderReport({ steps: { web: { chat: { ok: true, repo: "me/verity-chat", seeds: [{ action: "ran" }], local: { ok: true }, deployUrl: "u" }, meetings: { ok: false, reason: "gh is not signed in" } } }, next: [n] });
+  assert.match(text, /chat: me\/verity-chat — 1\/1 seeds ran, boots locally, \.env written, deploy: u/);
+  assert.match(text, /meetings: not set up \(gh is not signed in\)/);
+});
+
+test("web dry run: no clone yet reads as 'would run', not 'missing'; a missing model key is named in the hand-off", () => {
+  const nowhere = path.join(tmp(), "not-cloned-yet");
+  assert.deepEqual(runWebSeeds(nowhere, WEB_AGENTS.chat, {}, { dryRun: true }).rows.map(r => r.action), ["would run"]);
+  const n = webNext(WEB_AGENTS.chat, { dest: "/x", deployUrl: null, missingModelKey: "ANTHROPIC_API_KEY" });
+  assert.match(n.say, /needs ANTHROPIC_API_KEY too/);
+  assert.doesNotMatch(webNext(WEB_AGENTS.meetings, { dest: "/x", deployUrl: null }).say, /needs .* too/);
+});

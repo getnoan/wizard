@@ -7,6 +7,7 @@ import { writeEnv, ensureGitignored } from "./env-file.mjs";
 import { wireClients, MANUAL_CLIENTS } from "./clients.mjs";
 import { fetchSkillFiles, skillTargets, installSkill, writePointers } from "./skill.mjs";
 import * as pack from "./agents.mjs";
+import * as web from "./web.mjs";
 import { capture } from "./telemetry.mjs";
 import { renderReport } from "./report.mjs";
 
@@ -86,17 +87,36 @@ export async function run(args) {
   ui.step(5, "The agent pack");
   let wantAgents = args.agents;
   if (wantAgents == null) wantAgents = ui.interactive ? await ui.confirm("Set up the six open-source agents on your GitHub account too?", false) : false;
-  if (wantAgents) report.steps.agents = await setupAgents({ args, ui, dir, key, me, report });
+  // Carries the model key and the agent's name from the pack step to the web step, so a run that
+  // does both asks once. Never put in the report: the report is printed, and --json is parsed.
+  const shared = {};
+  if (wantAgents) report.steps.agents = await setupAgents({ args, ui, dir, key, me, report, shared });
   else { ui.info("skipped" + (args.yes && args.agents == null ? " (pass --agents to include it)" : "")); report.steps.agents = { skipped: true }; }
 
-  /* 6. report */
+  /* 6. web agents */
+  ui.step(6, "The web agents");
+  const wantWeb = [];
+  for (const [id, agent] of Object.entries(web.WEB_AGENTS)) {
+    let want = args[id];
+    if (want == null) want = ui.interactive ? await ui.confirm(`Set up ${agent.label} — ${agent.what}?`, false) : false;
+    if (want) wantWeb.push(id);
+  }
+  if (!wantWeb.length) {
+    ui.info("skipped" + (args.yes && args.meetings == null && args.chat == null ? " (pass --meetings and/or --chat to include them)" : ""));
+    report.steps.web = { skipped: true };
+  } else {
+    report.steps.web = {};
+    for (const id of wantWeb) report.steps.web[id] = await setupWeb({ id, args, ui, dir, key, me, report, shared });
+  }
+
+  /* 7. report */
   report.next.push({ id: "open", say: `Open ${APP_URL} to see the workspace your assistant is grounded in.` });
   return finish(0);
 }
 
 async function ask(ui, q, o) { return ui.ask(q, o); }
 
-async function setupAgents({ args, ui, dir, key, me, report }) {
+async function setupAgents({ args, ui, dir, key, me, report, shared = {} }) {
   const ready = pack.ghReady();
   if (!ready.ok) { ui.warn(ready.reason); return { ok: false, reason: ready.reason }; }
   const fork = pack.forkAndClone(dir, { dryRun: args.dryRun });
@@ -196,5 +216,63 @@ async function setupAgents({ args, ui, dir, key, me, report }) {
   }
   out.repo = pack.repoSlug(fork.dest);
   out.agentName = identity.AGENT_NAME;
+  Object.assign(shared, { modelKey: anthropic, modelKeyName: mName, modelBase: mBase, agentName: identity.AGENT_NAME });
+  return out;
+}
+
+/** One web agent: fork, seed, prove it boots, write its .env, hand the deploy to the assistant.
+ *  What it returns goes in the report, so it carries names and outcomes — never a key. */
+async function setupWeb({ id, args, ui, dir, key, me, report, shared }) {
+  const agent = web.WEB_AGENTS[id];
+  ui.info(`${agent.label}:`);
+  const ready = pack.ghReady();
+  if (!ready.ok) { ui.warn(ready.reason); return { ok: false, reason: ready.reason }; }
+  const fork = web.forkAndCloneWeb(dir, agent, { dryRun: args.dryRun });
+  ui.ok(`${fork.action}: ${fork.dest}${fork.error ? ` — ${fork.error}` : ""}`);
+  if (fork.error) return { ok: false, reason: fork.error };
+  const out = { ok: true, dest: fork.dest, seeds: [], skipped: [] };
+
+  // Seeds run under the person's own key: setting up their workspace is theirs to do.
+  const seeds = web.runWebSeeds(fork.dest, agent, { NOAN_PERSONAL_API_KEY: key }, { dryRun: args.dryRun });
+  out.seeds = seeds.rows;
+  for (const r of seeds.rows) (r.action === "failed" || r.action === "missing" ? ui.warn : ui.ok)(`${r.seed}: ${r.action}${r.slugs != null ? ` (${r.slugs} slug(s))` : ""}${r.error ? ` — ${r.error}` : ""}`);
+
+  // INSTALL.md step 0, for them: the service boots with no keys at all.
+  if (args.dryRun) out.local = { ok: null, reason: "dry run" };
+  else if (existsSync(fork.dest)) {
+    out.local = await web.proveLocally(fork.dest, agent);
+    if (out.local.ok) ui.ok(`boots locally with no keys (${out.local.probes.join(", ")} answered)`);
+    else ui.warn(`did not boot locally: ${out.local.reason} — INSTALL.md step 0 runs the same thing by hand`);
+  }
+
+  // The chat needs a model key; reuse the pack step's if this run had one, else env, else ask.
+  let modelKey = null, modelKeyName = "ANTHROPIC_API_KEY", modelBase = "";
+  if (agent.needsModelKey) {
+    if (shared.modelKey) ({ modelKey, modelKeyName, modelBase } = shared);
+    else {
+      try { modelBase = pack.modelBase(); } catch (e) { ui.warn(e.message); out.skipped.push({ name: "model key", why: e.message }); modelBase = null; }
+      if (modelBase !== null) {
+        modelKeyName = pack.modelKeyName();
+        modelKey = (process.env[modelKeyName] || process.env[modelKeyName === "LLM_API_KEY" ? "ANTHROPIC_API_KEY" : "LLM_API_KEY"] || "").trim()
+          || (ui.interactive ? await ui.ask(`API key for ${modelBase ? new URL(modelBase).host : "Anthropic"} (the chat's model; blank to add it later)`, { secret: true }) : "");
+        if (modelKey) {
+          const verdict = await pack.verifyModelKey(modelKey, modelBase);
+          if (verdict === false) { ui.warn(`${modelKeyName} was not accepted by its service; not written`); out.skipped.push({ name: modelKeyName, why: "rejected" }); modelKey = null; }
+        } else out.skipped.push({ name: modelKeyName, why: "not provided" });
+      }
+    }
+  }
+
+  const agentName = shared.agentName || pack.agentIdentity({ name: process.env.AGENT_NAME }).AGENT_NAME;
+  const pairs = web.webEnv(agent, { slugs: seeds.slugs, company: me.project?.name || "", agentName, modelKey, modelKeyName, modelBase: modelBase || "" });
+  const env = web.writeWebEnv(fork.dest, pairs, { dryRun: args.dryRun });
+  ui.ok(`${args.dryRun ? "would write" : env.created ? "wrote" : env.changed ? "updated" : "kept"} ${env.path} (${env.keys.join(", ") || "nothing new"}); .gitignore: ${env.gitignore}`);
+  out.env = { path: env.path, keys: env.keys, gitignore: env.gitignore };
+  const missingModelKey = agent.needsModelKey && !modelKey ? modelKeyName : null;
+  if (missingModelKey) { ui.warn(`no ${missingModelKey} written: the chat cannot answer until it has one`); out.missing = [missingModelKey]; }
+
+  out.repo = args.dryRun ? null : pack.repoSlug(fork.dest);
+  out.deployUrl = web.renderDeployUrl(out.repo);
+  report.next.push(web.webNext(agent, { dest: fork.dest, deployUrl: out.deployUrl, missingModelKey }));
   return out;
 }

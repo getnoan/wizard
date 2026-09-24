@@ -12,6 +12,12 @@ what it does with that key, and what to do if you find a problem.
 - Third-party keys for the agent pack (`--agents`) are verified against their own services and
   stored as GitHub repository secrets through the GitHub CLI. This program never sees a GitHub
   token; `gh` holds it.
+- The web agents (`--meetings`, `--chat`) are forked from `getnoan/verity-meetings` and
+  `getnoan/verity-chat` through `gh`. Their seed scripts run from your fork with your NOAN key,
+  exactly as the pack's do. Each service is then booted once on `127.0.0.1` with an environment
+  of `PATH` and `HOME` only — no key reaches it — and stopped. The `.env` written in each clone
+  is gitignored first and never holds your NOAN key: those services face the internet and get
+  a key of their own, which you create. The chat's model key, if given, goes there.
 - Telemetry is three events (a run started, then completed or cancelled) carrying the Node
   version, the platform, the exit code, the duration, whether the run was non-interactive,
   whether the report was JSON, and whether the workspace was empty. Never a key, never a path,
