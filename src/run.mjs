@@ -168,7 +168,8 @@ async function setupAgents({ args, ui, dir, key, me, report }) {
   pack.writePackEnv(fork.dest, { NOAN_PERSONAL_API_KEY: key, ...(anthropic && { [mName]: anthropic }), ...(mBase && { ANTHROPIC_BASE_URL: mBase }), ...(resend && { RESEND_API_KEY: resend }) }, args.dryRun);
   const seeds = pack.runSeeds(fork.dest, { NOAN_PERSONAL_API_KEY: key }, { dryRun: args.dryRun });
   out.seeds = seeds.rows;
-  for (const r of seeds.rows) ui.ok(`${r.seed}: ${r.action}${r.slugs != null ? ` (${r.slugs} slug(s))` : ""}${r.error ? ` — ${r.error}` : ""}`);
+  // A missing or failed seed is a warning, not a tick: its agent has no Config fact and no slug variable.
+  for (const r of seeds.rows) (/^(missing|failed)$/.test(r.action) ? ui.warn : ui.ok)(`${r.seed}: ${r.action}${r.slugs != null ? ` (${r.slugs} slug(s))` : ""}${r.error ? ` — ${r.error}` : ""}`);
   Object.assign(vars, seeds.slugs);
   // The blocks the agents read that hold no fact: one task each on the user's board, and a line in the report.
   const grounding = args.dryRun ? { available: false } : pack.runGroundingCheck(fork.dest, { NOAN_PERSONAL_API_KEY: key });

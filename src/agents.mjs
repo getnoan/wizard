@@ -6,7 +6,7 @@
  * the pack's documented ones. Safe mode stays on: the wizard never sets DRY_RUN to 0.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { writeEnv } from "./env-file.mjs";
@@ -128,15 +128,36 @@ export function setVariable(dest, name, value, dryRun) {
   return { name, action: r.status === 0 ? "set" : "failed", error: r.status === 0 ? undefined : (r.stderr || "").trim().split("\n")[0] };
 }
 
+/** Where a pack file lives in the clone, named as the pack names it (`seed-deck.mjs`).
+ *
+ *  The pack groups agents/ by agent — agents/<agent>/ for one agent's files, agents/shared/
+ *  for the rest — and writes agents/pack-layout.json mapping each name to its path. A pack
+ *  cloned before that grouping has neither the folders nor the map, and every file sits
+ *  directly in agents/. Both are live at once (a fork keeps whatever it was cloned from), so
+ *  both are read.
+ *
+ *  A layout file that exists but cannot be read THROWS. Falling back to the flat path would
+ *  report every seed "missing" and seed nothing — the silent failure the map exists to stop. */
+export function packFile(dest, name) {
+  const layoutPath = path.join(dest, "agents", "pack-layout.json");
+  if (existsSync(layoutPath)) {
+    let files;
+    try { files = JSON.parse(readFileSync(layoutPath, "utf8")).files; }
+    catch (e) { throw new Error(`agents/pack-layout.json in ${dest} is not readable JSON: ${e.message}`); }
+    if (files?.[name]) return path.join(dest, "agents", files[name]);
+  }
+  return path.join(dest, "agents", name);
+}
+
 /** Run every seed script the pack ships; collect the block slugs they print. */
 export function runSeeds(dest, env, { dryRun = false } = {}) {
   const seeds = ["seed-weekly-activity-report.mjs", "seed-fact-alignment.mjs", "seed-market-research-refresh.mjs", "seed-customer-support.mjs", "seed-deck.mjs"];
   const slugs = {}; const rows = [];
   for (const s of seeds) {
-    const p = path.join(dest, "agents", s);
+    const p = packFile(dest, s);
     if (!existsSync(p)) { rows.push({ seed: s, action: "missing" }); continue; }
     if (dryRun) { rows.push({ seed: s, action: "would run" }); continue; }
-    const r = spawnSync(process.execPath, [p], { cwd: path.join(dest, "agents"), encoding: "utf8", env: { ...process.env, ...env } });
+    const r = spawnSync(process.execPath, [p], { cwd: path.dirname(p), encoding: "utf8", env: { ...process.env, ...env } });
     const found = parseSeedOutput((r.stdout || "") + "\n" + (r.stderr || ""));
     Object.assign(slugs, found);
     rows.push({ seed: s, action: r.status === 0 ? "ran" : "failed", slugs: Object.keys(found).length, error: r.status === 0 ? undefined : (r.stderr || r.stdout || "").trim().split("\n").slice(-1)[0] });
@@ -146,9 +167,9 @@ export function runSeeds(dest, env, { dryRun = false } = {}) {
 
 /** The pack's grounding check: which blocks the agents read hold no fact. Runs in the clone; absent in an old pack. */
 export function runGroundingCheck(dest, env, { dryRun = false } = {}) {
-  const p = path.join(dest, "agents", "grounding-check.mjs");
+  const p = packFile(dest, "grounding-check.mjs");
   if (!existsSync(p)) return { available: false };
-  const r = spawnSync(process.execPath, [p, "--json", ...(dryRun ? ["--dry-run"] : [])], { cwd: path.join(dest, "agents"), encoding: "utf8", env: { ...process.env, ...env } });
+  const r = spawnSync(process.execPath, [p, "--json", ...(dryRun ? ["--dry-run"] : [])], { cwd: path.dirname(p), encoding: "utf8", env: { ...process.env, ...env } });
   return { available: true, ...parseGroundingOutput(r.stdout), error: r.status === 0 ? undefined : (r.stderr || "").trim().split("\n").slice(-1)[0] };
 }
 export function parseGroundingOutput(text) {
