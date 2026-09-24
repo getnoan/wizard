@@ -7,7 +7,7 @@ import { parseArgs } from "../src/args.mjs";
 import { upsertEnv, writeEnv, ensureGitignored } from "../src/env-file.mjs";
 import { mergeJsonServer, mergeToml, wireClients } from "../src/clients.mjs";
 import { installSkill, writePointers, POINTER_MARK, fetchSkillFiles } from "../src/skill.mjs";
-import { parseSeedOutput, parseGroundingOutput, agentIdentity, PACK_VARS, PACK_SECRETS,
+import { parseSeedOutput, parseGroundingOutput, packFile, runSeeds, runGroundingCheck, agentIdentity, PACK_VARS, PACK_SECRETS,
   modelBase, modelKeyName, verifyModelKey, DEFAULT_MODEL_BASE } from "../src/agents.mjs";
 import { classifyWorkspace, looksLikeKey } from "../src/noan.mjs";
 import { renderReport } from "../src/report.mjs";
@@ -271,4 +271,44 @@ test("model endpoint: the key is named and verified for the endpoint that will b
     assert.equal(await verifyModelKey("k", "https://gateway.example.com"), "unknown",
       "an unreachable gateway is not evidence against the key");
   } finally { globalThis.fetch = realFetch; }
+});
+
+/* The pack groups agents/ by agent and writes agents/pack-layout.json; a fork cloned earlier is
+ * flat. Fake seeds print one slug line each, so a seed that is not found shows up as a missing
+ * slug rather than as a quiet "missing" row. */
+function fakePack({ grouped }) {
+  const d = tmp();
+  const put = (rel, body) => { const p = path.join(d, "agents", rel); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, body); };
+  const seeds = { "seed-weekly-activity-report.mjs": "weekly-activity-report", "seed-fact-alignment.mjs": "fact-alignment",
+    "seed-market-research-refresh.mjs": "market-research-refresh", "seed-customer-support.mjs": "customer-support", "seed-deck.mjs": "sales-deck" };
+  const files = {};
+  for (const [s, folder] of Object.entries(seeds)) {
+    const rel = grouped ? `${folder}/${s}` : s; files[s] = rel;
+    put(rel, `console.log("${s.replace(/^seed-|\.mjs$/g, "").toUpperCase().replace(/-/g, "_")}_BLOCK_SLUG=slug-" + process.cwd().split("/").pop());\n`);
+  }
+  const g = grouped ? "shared/grounding-check.mjs" : "grounding-check.mjs"; files["grounding-check.mjs"] = g;
+  put(g, `console.log(JSON.stringify({ gaps: [{ slug: "brand-identity", title: "Brand Identity", agents: ["sales deck"] }], filed: [] }));\n`);
+  if (grouped) writeFileSync(path.join(d, "agents", "pack-layout.json"), JSON.stringify({ files }));
+  return d;
+}
+
+for (const grouped of [false, true]) {
+  test(`pack files: seeds and the grounding check are found in a ${grouped ? "grouped" : "flat"} pack`, () => {
+    const d = fakePack({ grouped });
+    assert.equal(packFile(d, "seed-deck.mjs"), path.join(d, "agents", grouped ? "sales-deck/seed-deck.mjs" : "seed-deck.mjs"));
+    const { slugs, rows } = runSeeds(d, {});
+    assert.deepEqual(rows.map(r => r.action), ["ran", "ran", "ran", "ran", "ran"]);
+    assert.equal(Object.keys(slugs).length, 5);
+    // Each seed runs from its own folder, as the pack's CI runs its files.
+    assert.equal(slugs.DECK_BLOCK_SLUG, `slug-${grouped ? "sales-deck" : "agents"}`);
+    const gc = runGroundingCheck(d, {});
+    assert.equal(gc.available, true); assert.equal(gc.gaps[0].slug, "brand-identity");
+  });
+}
+
+test("pack files: a name the layout does not list falls back to agents/; an unreadable layout throws", () => {
+  const d = fakePack({ grouped: true });
+  assert.equal(packFile(d, "not-listed.mjs"), path.join(d, "agents", "not-listed.mjs"));
+  writeFileSync(path.join(d, "agents", "pack-layout.json"), "{ not json");
+  assert.throws(() => packFile(d, "seed-deck.mjs"), /pack-layout\.json .* not readable JSON/);
 });
