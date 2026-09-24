@@ -38,11 +38,27 @@ export const PACK_SECRETS = ["NOAN_PERSONAL_API_KEY", "RESEND_API_KEY", "ANTHROP
 export const PACK_VARS = ["MAIL_FROM", "REPLY_TO", "ESCALATE_TO", "STATE_BACKEND", "ANTHROPIC_BASE_URL", "AGENT_NAME", "COMPANY_NAME", "AGENT_IDENTITY_IDS", "COMMANDERS", "REPORT_RECIPIENT_TAG"];
 
 /** The pack's model endpoint, from the same variable the pack itself reads. Bare base, no
- *  trailing slash; empty string means the default vendor. */
+ *  trailing slash; empty string means the default vendor.
+ *
+ *  A bad value THROWS rather than falling back, and both rules are the pack's own
+ *  (resolveBaseUrl in agents/anthropic.mjs), deliberately down to the wording.
+ *
+ *  This returned "" on anything URL() rejected until review caught it. "" means "default
+ *  vendor", so `ANTHROPIC_BASE_URL=openrouter.ai/api` — a missing scheme, the likeliest typo
+ *  there is — silently became "no endpoint": the key went in under the vendor's name, was
+ *  verified against the vendor's host, came back 401 and was DISCARDED. That is precisely the
+ *  sequence this whole change exists to stop, reached by a typo instead of by design.
+ *
+ *  The scheme rule matters for the opposite reason: URL() happily parses `ftp://host` and
+ *  `javascript:...`, and accepting one writes a repository variable the agents refuse at
+ *  runtime — on a schedule, where nobody is watching. Better to refuse it here, in front of
+ *  someone who can retype it. */
 export function modelBase(env = process.env) {
   const raw = (env.ANTHROPIC_BASE_URL || "").trim().replace(/\/+$/, "");
   if (!raw) return "";
-  try { new URL(raw); } catch { return ""; }
+  let url;
+  try { url = new URL(raw); } catch { throw new Error(`ANTHROPIC_BASE_URL is not a valid URL: ${raw}`); }
+  if (!/^https?:$/.test(url.protocol)) throw new Error(`ANTHROPIC_BASE_URL must be http(s): ${raw}`);
   return raw;
 }
 export const DEFAULT_MODEL_BASE = "https://api.anthropic.com";

@@ -224,12 +224,29 @@ test("model endpoint: the key is named and verified for the endpoint that will b
   assert.ok(PACK_SECRETS.includes("LLM_API_KEY") && PACK_SECRETS.includes("ANTHROPIC_API_KEY"));
   assert.ok(PACK_VARS.includes("ANTHROPIC_BASE_URL"));
 
-  // Bare base, no trailing slash, and a malformed value is ignored rather than propagated as a
-  // broken endpoint the user would have to debug at the first model call.
+  // Bare base, no trailing slash. Unset is the only thing that means "default vendor".
   assert.equal(modelBase({}), "");
+  assert.equal(modelBase({ ANTHROPIC_BASE_URL: "   " }), "");
   assert.equal(modelBase({ ANTHROPIC_BASE_URL: "https://gateway.example.com///" }), "https://gateway.example.com");
   assert.equal(modelBase({ ANTHROPIC_BASE_URL: "  https://gateway.example.com/llm  " }), "https://gateway.example.com/llm");
-  assert.equal(modelBase({ ANTHROPIC_BASE_URL: "not a url" }), "");
+
+  /* A bad value THROWS rather than falling back, with the pack's own two rules and wording.
+   *
+   * The assertion here used to be `modelBase({ANTHROPIC_BASE_URL: "not a url"}) === ""`, which
+   * pinned the wrong behaviour in place: "" means default vendor, so a missing scheme — the
+   * likeliest typo of the lot — silently became "no endpoint", the key went in under the
+   * vendor's name, was checked against the vendor's host, and was discarded on the 401. The
+   * exact failure this file exists to prevent, reached by a typo rather than by design.
+   *
+   * The scheme rule is the mirror image: URL() parses ftp:// and javascript: happily, and
+   * accepting one writes a repository variable the agents refuse at runtime, on a schedule,
+   * where nobody is watching. */
+  for (const bad of ["not a url", "openrouter.ai/api", "gateway.example.com"])
+    assert.throws(() => modelBase({ ANTHROPIC_BASE_URL: bad }), /is not a valid URL/, `should reject ${bad}`);
+  for (const bad of ["ftp://gateway.example.com/x", "javascript:alert(1)", "file:///etc/passwd"])
+    assert.throws(() => modelBase({ ANTHROPIC_BASE_URL: bad }), /must be http\(s\)/, `should reject ${bad}`);
+  // And the key name follows, rather than quietly reading as the vendor's.
+  assert.throws(() => modelKeyName({ ANTHROPIC_BASE_URL: "openrouter.ai/api" }), /is not a valid URL/);
 
   // The regression this exists for: verification used to hit the vendor's own host whatever the
   // endpoint was, so a valid gateway key came back 401 and the wizard DISCARDED it. Against a

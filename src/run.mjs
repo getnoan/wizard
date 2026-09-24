@@ -125,7 +125,19 @@ async function setupAgents({ args, ui, dir, key, me, report }) {
    * With one set, the key is verified against THAT endpoint and stored under the neutral name —
    * verifying a gateway key against the vendor's own host returns 401, and the wizard used to
    * discard a perfectly good key on the strength of it. Either spelling is accepted as a source. */
-  const mBase = pack.modelBase();
+  /* A bad ANTHROPIC_BASE_URL stops the agents step and says why, rather than being treated as
+   * "unset". Falling back would put the key in under the vendor's name and verify it against the
+   * vendor's host — the discarded-key failure this change exists to fix, reached by a typo.
+   *
+   * The fork and clone have already happened by here, so the message says what is and is not
+   * true: no secret, variable or .env has been written, and re-running is safe because
+   * forkAndClone reuses an existing clone. */
+  let mBase;
+  try { mBase = pack.modelBase(); }
+  catch (e) {
+    ui.warn(`${e.message}\n  Fix it (or unset it to use the default) and run again — no secret or variable was written, and the clone is reused.`);
+    return { ok: false, reason: e.message };
+  }
   const mName = pack.modelKeyName();
   const mHost = mBase ? new URL(mBase).host : "Anthropic";
   const anthropic = await need(mName, (k) => pack.verifyModelKey(k, mBase),
