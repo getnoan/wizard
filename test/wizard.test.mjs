@@ -7,7 +7,8 @@ import { parseArgs } from "../src/args.mjs";
 import { upsertEnv, writeEnv, ensureGitignored } from "../src/env-file.mjs";
 import { mergeJsonServer, mergeToml, wireClients } from "../src/clients.mjs";
 import { installSkill, writePointers, POINTER_MARK, fetchSkillFiles } from "../src/skill.mjs";
-import { parseSeedOutput, parseGroundingOutput, agentIdentity, PACK_VARS } from "../src/agents.mjs";
+import { parseSeedOutput, parseGroundingOutput, agentIdentity, PACK_VARS, PACK_SECRETS,
+  modelBase, modelKeyName, verifyModelKey, DEFAULT_MODEL_BASE } from "../src/agents.mjs";
 import { classifyWorkspace, looksLikeKey } from "../src/noan.mjs";
 import { renderReport } from "../src/report.mjs";
 import { telemetryEnabled, capture, POSTHOG_TOKEN, ALLOWED_PROPERTIES } from "../src/telemetry.mjs";
@@ -212,4 +213,62 @@ test("telemetry: the request is abortable, and every event of one run shares its
     assert.equal("dir" in sent[0].properties, false, "a caller must not be able to send a path");
     assert.equal("workspace" in sent[0].properties, false, "a caller must not be able to send a workspace name");
   } finally { globalThis.fetch = real; saved.ci === undefined ? delete process.env.CI : (process.env.CI = saved.ci); }
+});
+
+test("model endpoint: the key is named and verified for the endpoint that will be called", async () => {
+  // The pack accepts two names for one key. Which one the wizard STORES under follows the
+  // endpoint, because "ANTHROPIC_API_KEY" holding an OpenRouter key is a lie the next reader
+  // has to unpick.
+  assert.equal(modelKeyName({}), "ANTHROPIC_API_KEY");
+  assert.equal(modelKeyName({ ANTHROPIC_BASE_URL: "https://gateway.example.com" }), "LLM_API_KEY");
+  assert.ok(PACK_SECRETS.includes("LLM_API_KEY") && PACK_SECRETS.includes("ANTHROPIC_API_KEY"));
+  assert.ok(PACK_VARS.includes("ANTHROPIC_BASE_URL"));
+
+  // Bare base, no trailing slash. Unset is the only thing that means "default vendor".
+  assert.equal(modelBase({}), "");
+  assert.equal(modelBase({ ANTHROPIC_BASE_URL: "   " }), "");
+  assert.equal(modelBase({ ANTHROPIC_BASE_URL: "https://gateway.example.com///" }), "https://gateway.example.com");
+  assert.equal(modelBase({ ANTHROPIC_BASE_URL: "  https://gateway.example.com/llm  " }), "https://gateway.example.com/llm");
+
+  /* A bad value THROWS rather than falling back, with the pack's own two rules and wording.
+   *
+   * The assertion here used to be `modelBase({ANTHROPIC_BASE_URL: "not a url"}) === ""`, which
+   * pinned the wrong behaviour in place: "" means default vendor, so a missing scheme — the
+   * likeliest typo of the lot — silently became "no endpoint", the key went in under the
+   * vendor's name, was checked against the vendor's host, and was discarded on the 401. The
+   * exact failure this file exists to prevent, reached by a typo rather than by design.
+   *
+   * The scheme rule is the mirror image: URL() parses ftp:// and javascript: happily, and
+   * accepting one writes a repository variable the agents refuse at runtime, on a schedule,
+   * where nobody is watching. */
+  for (const bad of ["not a url", "openrouter.ai/api", "gateway.example.com"])
+    assert.throws(() => modelBase({ ANTHROPIC_BASE_URL: bad }), /is not a valid URL/, `should reject ${bad}`);
+  for (const bad of ["ftp://gateway.example.com/x", "javascript:alert(1)", "file:///etc/passwd"])
+    assert.throws(() => modelBase({ ANTHROPIC_BASE_URL: bad }), /must be http\(s\)/, `should reject ${bad}`);
+  // And the key name follows, rather than quietly reading as the vendor's.
+  assert.throws(() => modelKeyName({ ANTHROPIC_BASE_URL: "openrouter.ai/api" }), /is not a valid URL/);
+
+  // The regression this exists for: verification used to hit the vendor's own host whatever the
+  // endpoint was, so a valid gateway key came back 401 and the wizard DISCARDED it. Against a
+  // configured endpoint a non-200 is "unknown" (/v1/models is not part of the Messages
+  // contract, so a gateway need not implement it); against the default vendor it is still false.
+  const realFetch = globalThis.fetch;
+  const seen = [];
+  try {
+    globalThis.fetch = async (url) => { seen.push(String(url)); return { status: 401 }; };
+    assert.equal(await verifyModelKey("k", ""), false, "the vendor's own 401 still means a bad key");
+    assert.equal(seen.at(-1), `${DEFAULT_MODEL_BASE}/v1/models`);
+    assert.equal(await verifyModelKey("k", "https://gateway.example.com"), "unknown",
+      "a gateway's 401 must not discard the key");
+    assert.equal(seen.at(-1), "https://gateway.example.com/v1/models", "verified against the endpoint actually called");
+
+    globalThis.fetch = async () => ({ status: 200 });
+    assert.equal(await verifyModelKey("k", ""), true);
+    assert.equal(await verifyModelKey("k", "https://gateway.example.com"), true);
+
+    globalThis.fetch = async () => { throw new Error("ECONNREFUSED"); };
+    assert.equal(await verifyModelKey("k", ""), false);
+    assert.equal(await verifyModelKey("k", "https://gateway.example.com"), "unknown",
+      "an unreachable gateway is not evidence against the key");
+  } finally { globalThis.fetch = realFetch; }
 });

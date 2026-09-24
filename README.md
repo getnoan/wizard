@@ -32,10 +32,15 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
    read your website, repo and docs, propose a structure, and write only after you say yes.
 5. **The agent pack** (optional, `--agents`). Asks what to call your agent — Verity by default, the
    name she answers to in NOAN — then forks [getnoan/agent-pack](https://github.com/getnoan/agent-pack)
-   to your account, verifies and stores your Anthropic and Resend keys (and optionally a Postgres URL
+   to your account, verifies and stores your model and Resend keys (and optionally a Postgres URL
    and a Firecrawl key) as repository secrets, runs the pack's seed scripts so each agent's starting
    instructions are in your workspace, records the name and the block slugs as repository variables,
    and triggers one dry run. Safe mode stays on: the wizard never sets `DRY_RUN` to 0. That switch is yours.
+
+   The model does not have to be Anthropic's. Set `ANTHROPIC_BASE_URL` in the environment before
+   running — `https://openrouter.ai/api`, say, or your own gateway — and the wizard verifies your key
+   against *that* endpoint, stores it as `LLM_API_KEY`, and records the endpoint as a repository
+   variable so the fork actually uses it. Unset, nothing changes: it asks for an Anthropic key.
 6. **The report.** What happened, and the one thing to do next.
 
 ## For a coding assistant

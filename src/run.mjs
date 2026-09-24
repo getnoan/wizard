@@ -105,14 +105,44 @@ async function setupAgents({ args, ui, dir, key, me, report }) {
   const out = { ok: true, dest: fork.dest, secrets: [], variables: [], seeds: [], skipped: [] };
 
   // Keys: from the environment (an agent's run) or a prompt (a person's). Verified before they are stored.
-  const need = async (name, verify, prompt, { optional = false } = {}) => {
-    let v = (process.env[name] || "").trim();
+  const need = async (name, verify, prompt, { optional = false, from = [] } = {}) => {
+    // `from` is other env names that may carry the same value. The model key has two accepted
+    // spellings and a user who set the one we are not storing under has still configured it.
+    let v = "";
+    for (const n of [name, ...from]) { v = (process.env[n] || "").trim(); if (v) break; }
     if (!v && ui.interactive) v = await ui.ask(prompt, { secret: true });
     if (!v) { out.skipped.push({ name, why: optional ? "not provided" : "required, not provided" }); return null; }
-    if (verify && !(await verify(v))) { ui.warn(`${name} was not accepted by its service; not stored`); out.skipped.push({ name, why: "rejected" }); return null; }
+    if (verify) {
+      // A verdict of "unknown" means the endpoint could not answer, not that the key is bad —
+      // see verifyModelKey. Discarding on that would throw away a working key.
+      const verdict = await verify(v);
+      if (verdict === "unknown") ui.warn(`${name} could not be confirmed by ${prompt.replace(/^.*for /, "").replace(/ \(.*$/, "")}; storing it anyway`);
+      else if (!verdict) { ui.warn(`${name} was not accepted by its service; not stored`); out.skipped.push({ name, why: "rejected" }); return null; }
+    }
     return v;
   };
-  const anthropic = await need("ANTHROPIC_API_KEY", pack.verifyAnthropic, "Anthropic API key (the agents' model)");
+  /* The model endpoint is configuration in the pack (ANTHROPIC_BASE_URL), so it is here too.
+   * With one set, the key is verified against THAT endpoint and stored under the neutral name —
+   * verifying a gateway key against the vendor's own host returns 401, and the wizard used to
+   * discard a perfectly good key on the strength of it. Either spelling is accepted as a source. */
+  /* A bad ANTHROPIC_BASE_URL stops the agents step and says why, rather than being treated as
+   * "unset". Falling back would put the key in under the vendor's name and verify it against the
+   * vendor's host — the discarded-key failure this change exists to fix, reached by a typo.
+   *
+   * The fork and clone have already happened by here, so the message says what is and is not
+   * true: no secret, variable or .env has been written, and re-running is safe because
+   * forkAndClone reuses an existing clone. */
+  let mBase;
+  try { mBase = pack.modelBase(); }
+  catch (e) {
+    ui.warn(`${e.message}\n  Fix it (or unset it to use the default) and run again — no secret or variable was written, and the clone is reused.`);
+    return { ok: false, reason: e.message };
+  }
+  const mName = pack.modelKeyName();
+  const mHost = mBase ? new URL(mBase).host : "Anthropic";
+  const anthropic = await need(mName, (k) => pack.verifyModelKey(k, mBase),
+    `API key for ${mHost} (the agents' model)`,
+    { from: [mName === "LLM_API_KEY" ? "ANTHROPIC_API_KEY" : "LLM_API_KEY"] });
   const resend = await need("RESEND_API_KEY", pack.verifyResend, "Resend API key (the agents' email)");
   const db = await need("DATABASE_URL", null, "Postgres URL for the agents' state ledger (blank to skip; then only market research runs)", { optional: true });
   const firecrawl = await need("FIRECRAWL_API_KEY", pack.verifyFirecrawl, "Firecrawl API key (market research; blank to skip)", { optional: true });
@@ -125,14 +155,17 @@ async function setupAgents({ args, ui, dir, key, me, report }) {
         ? await ui.ask(`Pronouns for ${askedName}, in ${askedName}'s own prose (blank for they/them)`)
         : "") });
 
-  const secrets = { NOAN_PERSONAL_API_KEY: key, ...(anthropic && { ANTHROPIC_API_KEY: anthropic }), ...(resend && { RESEND_API_KEY: resend }),
+  const secrets = { NOAN_PERSONAL_API_KEY: key, ...(anthropic && { [mName]: anthropic }), ...(resend && { RESEND_API_KEY: resend }),
                     ...(db && { DATABASE_URL: db }), ...(firecrawl && { FIRECRAWL_API_KEY: firecrawl }), NEWSLETTER_UNSUB_SECRET: pack.randomSecret() };
   for (const [n, v] of Object.entries(secrets)) { const r = pack.setSecret(fork.dest, n, v, args.dryRun); out.secrets.push(r); ui.ok(`secret ${n}: ${r.action}${r.error ? ` — ${r.error}` : ""}`); }
-  const vars = { DRY_RUN: "1", STATE_BACKEND: db ? "postgres" : "local", ...(mailFrom && { MAIL_FROM: mailFrom }), ...(replyTo && { REPLY_TO: replyTo }), ...(escalateTo && { ESCALATE_TO: escalateTo }),
+  // The endpoint is a repository VARIABLE, not a secret: without it the fork holds a gateway key
+  // and still calls the default vendor, which is the same "documented is not delivered" trap the
+  // pack's own workflows had.
+  const vars = { DRY_RUN: "1", STATE_BACKEND: db ? "postgres" : "local", ...(mBase && { ANTHROPIC_BASE_URL: mBase }), ...(mailFrom && { MAIL_FROM: mailFrom }), ...(replyTo && { REPLY_TO: replyTo }), ...(escalateTo && { ESCALATE_TO: escalateTo }),
                  ...identity,
                  COMPANY_NAME: me.project?.name || "", ...(me.identity?.id && { AGENT_IDENTITY_IDS: me.identity.id }), ...(me.identity?.email && { COMMANDERS: me.identity.email }) };
   // The seeds need the key in the clone's .env; the pack's own .env.example documents the rest.
-  pack.writePackEnv(fork.dest, { NOAN_PERSONAL_API_KEY: key, ...(anthropic && { ANTHROPIC_API_KEY: anthropic }), ...(resend && { RESEND_API_KEY: resend }) }, args.dryRun);
+  pack.writePackEnv(fork.dest, { NOAN_PERSONAL_API_KEY: key, ...(anthropic && { [mName]: anthropic }), ...(mBase && { ANTHROPIC_BASE_URL: mBase }), ...(resend && { RESEND_API_KEY: resend }) }, args.dryRun);
   const seeds = pack.runSeeds(fork.dest, { NOAN_PERSONAL_API_KEY: key }, { dryRun: args.dryRun });
   out.seeds = seeds.rows;
   for (const r of seeds.rows) ui.ok(`${r.seed}: ${r.action}${r.slugs != null ? ` (${r.slugs} slug(s))` : ""}${r.error ? ` — ${r.error}` : ""}`);
@@ -151,7 +184,7 @@ async function setupAgents({ args, ui, dir, key, me, report }) {
   ui.ok(`${out.variables.length} repository variable(s) ${args.dryRun ? "to set" : "set"} (DRY_RUN=1: every agent stays in safe mode)`);
   // No point dispatching a run that will only fail for a missing key: say what is missing instead.
   if (!anthropic || !resend) {
-    const missing = [!anthropic && "ANTHROPIC_API_KEY", !resend && "RESEND_API_KEY"].filter(Boolean);
+    const missing = [!anthropic && mName, !resend && "RESEND_API_KEY"].filter(Boolean);
     out.incomplete = missing;
     ui.warn(`not dispatching a run: ${missing.join(" and ")} still missing. Add them as repository secrets (or re-run with them in the environment), then run any agent workflow with dry_run=1.`);
   } else {
