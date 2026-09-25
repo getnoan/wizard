@@ -29,7 +29,10 @@ export function mergeJsonServer(existing, container, entry) {
 export function mergeToml(text, table, lines) {
   const block = `[${table}]\n${lines.join("\n")}\n`;
   const src = text || "";
-  const rx = new RegExp(`^\\[${table.replace(/\./g, "\\.")}\\]\\n(?:(?!\\[)[^\\n]*\\n?)*`, "m");
+  // Escape every regex metacharacter, not only the dot: the table name is ours today, but a
+  // partial escape is exactly what CodeQL js/incomplete-sanitization flags, and it is one line.
+  const esc = table.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const rx = new RegExp(`^\\[${esc}\\]\\n(?:(?!\\[)[^\\n]*\\n?)*`, "m");
   if (rx.test(src)) {
     const cur = src.match(rx)[0];
     if (cur.trim() === block.trim()) return { text: src, action: "unchanged" };
