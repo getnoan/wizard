@@ -15,6 +15,13 @@ export function renderReport(report, { json = false } = {}) {
   if (s.skill?.rows) L.push(`skill: ${s.skill.rows.map(r => `${r.id} (${r.written} written)`).join(" · ")}; pointers: ${s.skill.pointers.map(p => p.action).join(", ")}`);
   if (s.workspace) L.push(`facts: ${s.workspace.count ?? "?"} (${s.workspace.state})`);
   if (s.agents && !s.agents.skipped) L.push(s.agents.ok ? `agents: ${s.agents.repo || s.agents.dest} — ${s.agents.agentName || "your agent"}, ${s.agents.secrets.length} secrets, ${s.agents.variables.length} variables, safe mode on` : `agents: not set up (${s.agents.reason})`);
+  if (s.web && !s.web.skipped) for (const [id, w] of Object.entries(s.web)) {
+    if (!w.ok) { L.push(`${id}: not set up (${w.reason})`); continue; }
+    if (report.dryRun) { L.push(`${id}: would fork to ${w.dest}, run ${w.seeds.length} seed(s), boot it locally and write its .env${w.missing?.length ? ` (still needs ${w.missing.join(", ")})` : ""}`); continue; }
+    const seeded = w.seeds.filter(r => r.action === "ran").length;
+    const local = w.local?.ok ? "boots locally" : w.local?.ok === false ? `local boot failed (${w.local.reason})` : "local boot not tried";
+    L.push(`${id}: ${w.repo || w.dest} — ${seeded}/${w.seeds.length} seeds ran, ${local}, .env written${w.missing?.length ? ` (still needs ${w.missing.join(", ")})` : ""}${w.deployUrl ? `, deploy: ${w.deployUrl}` : ""}`);
+  }
   if (report.next?.length) { L.push("", "──────── next ────────"); for (const n of report.next) L.push(`• ${n.say}${n.why ? `  (${n.why})` : ""}`); }
   L.push("");
   return L.join("\n");

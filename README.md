@@ -8,7 +8,8 @@ npx -y @getnoan/wizard@latest
 
 It takes your NOAN API key, points your coding assistants at the NOAN MCP server, installs the
 NOAN skill, checks whether your fact layer has anything in it, and, if you want, sets up the six
-open-source agents on your own GitHub account. Then it tells you what it did and what to do next.
+open-source agents on your own GitHub account and gets the two web agents — booking pages and a
+site chat — ready to deploy. Then it tells you what it did and what to do next.
 Run it again any time; every write is a merge, and nothing you have is overwritten.
 
 ## What it does
@@ -41,7 +42,20 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
    running — `https://openrouter.ai/api`, say, or your own gateway — and the wizard verifies your key
    against *that* endpoint, stores it as `LLM_API_KEY`, and records the endpoint as a repository
    variable so the fork actually uses it. Unset, nothing changes: it asks for an Anthropic key.
-6. **The report.** What happened, and the one thing to do next.
+6. **The web agents** (optional, `--meetings`, `--chat`). Two agents run as always-on services on
+   your own domain rather than as scheduled jobs, so they live in their own repos:
+   [Verity Meetings](https://github.com/getnoan/verity-meetings) (booking pages) and
+   [Verity Chat](https://github.com/getnoan/verity-chat) (a chat widget for your website). For each
+   one you pick, the wizard forks the repo to your account, runs its seed scripts so its starting
+   instructions are in your workspace (in a stack of their own, apart from any other agent's), boots
+   it locally with no keys to prove it works, and writes a gitignored `.env` in the clone with the
+   block slugs. Deploying needs accounts only you can create — a host, a Supabase project, and for
+   Meetings, Google Calendar credentials — so the report hands your assistant the rest of the repo's
+   `INSTALL.md` and a one-click Render deploy link.
+
+   Your personal NOAN key is **not** written into either service's `.env`: these answer the open
+   internet, so each gets a NOAN key made for it alone. The report says so.
+7. **The report.** What happened, and the one thing to do next.
 
 ## For a coding assistant
 
@@ -55,7 +69,9 @@ NOAN_API_KEY=npak_… npx -y @getnoan/wizard@latest --yes --json
 (progress goes to stderr) with a `next` list an agent can act on, including the first-connect
 hand-off when the workspace is empty. `--agents` adds the pack step; it reads `ANTHROPIC_API_KEY`,
 `RESEND_API_KEY`, `DATABASE_URL`, `FIRECRAWL_API_KEY`, `MAIL_FROM`, `REPLY_TO` and `ESCALATE_TO`
-from the environment and skips what is missing, saying so.
+from the environment and skips what is missing, saying so. `--meetings` and `--chat` add the web
+agents; the chat reads its model key from the same variables as the pack (or reuses the pack
+step's in the same run), and a `next` item per service carries the deploy hand-off.
 
 Exit codes: 0 done, 2 the key did not work, 3 cancelled, 1 anything else.
 
@@ -69,6 +85,8 @@ Exit codes: 0 done, 2 the key did not work, 3 cancelled, 1 anything else.
 | `--global` | user-scope client config instead of project scope |
 | `--dir <path>` | the project directory (default: current) |
 | `--agents` / `--no-agents` | include or skip the agent pack step |
+| `--meetings` / `--no-meetings` | include or skip Verity Meetings (booking pages) |
+| `--chat` / `--no-chat` | include or skip Verity Chat (a chat widget for your site) |
 | `--no-mcp`, `--no-skill` | skip a step |
 | `--dry-run` | show every write without making it |
 | `--no-telemetry` | send nothing about this run (also `NOAN_WIZARD_NO_TELEMETRY`, `DO_NOT_TRACK`, or any `CI`) |
