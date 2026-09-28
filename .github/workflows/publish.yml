@@ -40,6 +40,10 @@ jobs:
         with:
           node-version: "22"          # trusted publishing needs Node ≥ 22.14 and npm ≥ 11.5.1
           registry-url: "https://registry.npmjs.org"
+          # Never restore a dependency cache in the job that publishes: a poisoned cache could run
+          # attacker code with the OIDC token in reach. setup-node turns caching on by itself when
+          # package.json names a packageManager, so this says no now, before anyone adds one.
+          package-manager-cache: false
       - run: npm install -g npm@latest
       - run: node --test
       - name: The tag in package.json matches the release tag
