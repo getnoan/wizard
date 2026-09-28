@@ -28,6 +28,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # A release no longer publishes on its own: the job waits in the npm-publish environment
+    # until Dan or Marie approves it (Settings → Environments). The environment only accepts
+    # v* tags and main, and only repo admins can create or move a v* tag (the "Release tags:
+    # admins only" ruleset). On npmjs.com the trusted publisher names this environment as well,
+    # so a run outside it cannot publish even if someone edits this file.
+    environment: npm-publish
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0

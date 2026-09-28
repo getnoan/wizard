@@ -40,3 +40,7 @@ exploited. We aim to acknowledge within two working days.
 Releases are published to npm from GitHub Actions through npm's trusted publishing: no npm token
 exists anywhere, and each release carries a provenance attestation linking it to the commit and
 workflow that built it. `npm audit signatures` verifies it.
+
+A release does not publish on its own. The publish job waits in a protected `npm-publish`
+environment until one of two named maintainers approves it; only repository admins can create or
+move a `v*` release tag; and npm accepts a publish only from that workflow in that environment.
