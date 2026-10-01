@@ -22,9 +22,9 @@ export async function whoAmI(key) {
   return { ok: true, project: body.project, identity: body.identity };
 }
 
-/** Is this /me identity NOAN's agent (role bot, an address on the reserved .invalid domain)? */
+/** Is this /me identity NOAN's agent? Its role is "bot" (and the API gives it no email). */
 export function isAgentIdentity(identity) {
-  return identity?.role === "bot" || /@[^@\s]+\.invalid$/i.test(String(identity?.email || "").trim());
+  return identity?.role === "bot";
 }
 
 /**
@@ -37,7 +37,7 @@ export function isAgentIdentity(identity) {
  *
  * Deriving both from one key's /me was wrong either way: a person's key made the person "the
  * agent", so every comment they wrote was classed as the agent's own and ignored; an agent key
- * made the agent the only commander, at an address that cannot receive mail.
+ * made the agent the only commander, and the agent has no email to be one.
  *
  *   person  GET /me of the user's own key (step 1), when it is a person
  *   agent   GET /me of an agent-owned key, when one was given (or step 1's, if that was the agent)
@@ -51,7 +51,6 @@ export function agentRoles({ person = null, agent = null, commanders = "" } = {}
   const agentId = agent && isAgentIdentity(agent) ? agent.id : null;
   const humans = new Set(String(commanders || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean));
   if (person && !isAgentIdentity(person) && person.email) humans.add(String(person.email).toLowerCase());
-  for (const h of [...humans]) if (/@[^@\s]+\.invalid$/i.test(h)) humans.delete(h);
   const out = { agentIds: agentId, commanders: [...humans].join(","), runAs: agentId ? "agent" : "person", warnings };
   if (!agentId) {
     // No agent identity: keep the old single-account setup, but say what it costs.

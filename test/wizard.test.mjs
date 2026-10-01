@@ -396,11 +396,11 @@ test("web dry run: no clone yet reads as 'would run', not 'missing'; a missing m
 
 /* NOAN's agent role: the agents answer to the agent identity (role bot); people steer them. */
 const PERSON = { id: "dan-1", email: "dan@acme.com", role: "owner" };
-const AGENT = { id: "agent-1", email: "agent+org@getnoan.invalid", role: "bot", name: "Verity" };
+const AGENT = { id: "agent-1", email: null, role: "bot", name: "Verity" };   // the API gives the agent no email
 
-test("agent role: a bot role or an .invalid address is the agent; a person is not", () => {
+test("agent role: role bot is the agent; a person, or an identity with no role, is not", () => {
   assert.equal(isAgentIdentity(AGENT), true);
-  assert.equal(isAgentIdentity({ email: "agent+org@getnoan.invalid" }), true);
+  assert.equal(isAgentIdentity({ id: "x", email: null }), false);
   assert.equal(isAgentIdentity(PERSON), false);
   assert.equal(isAgentIdentity(null), false);
 });
@@ -427,7 +427,7 @@ test("agent role: the agent is never a commander, even as the only key", () => {
   assert.equal(alone.agentIds, "agent-1");
   assert.equal(alone.commanders, "");
   assert.match(alone.warnings.join(" "), /No commander/);
-  const listed = agentRoles({ agent: AGENT, commanders: "Neal@Acme.com, agent+org@getnoan.invalid" });
+  const listed = agentRoles({ agent: AGENT, commanders: "Neal@Acme.com" });
   assert.equal(listed.commanders, "neal@acme.com");
 });
 
