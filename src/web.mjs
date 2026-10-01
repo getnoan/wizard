@@ -162,7 +162,7 @@ export function webNext(agent, { dest, deployUrl, missingModelKey = null }) {
     say: `Finish ${agent.label} (${agent.what}): in ${dest}, follow INSTALL.md ${agent.remaining}.`
       + (missingModelKey ? ` It needs ${missingModelKey} too — the wizard had none to write.` : "")
       + (deployUrl ? ` One-click deploy: ${deployUrl}.` : "")
-      + ` Create a NOAN API key for this service alone and set it as NOAN_AGENT_API_KEY in the deploy env — not your personal key.`
+      + ` Mint a NOAN key for this service alone under your NOAN agent (Settings → Team → Agent → API keys) and set it as NOAN_AGENT_API_KEY in the deploy env — not your personal key.`
       + ` ${agent.after}`,
     why: "the rest needs accounts only you can create; INSTALL.md marks those steps HUMAN",
   };

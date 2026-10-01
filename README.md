@@ -14,8 +14,8 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
 
 ## What it does
 
-1. **Your key.** Create one at app.getnoan.com → Settings → API → New key and paste it in (it is
-   not echoed). The wizard checks it with `GET /me`, writes it to `.env` as `NOAN_API_KEY` and
+1. **Your key.** Create your own at app.getnoan.com → Settings → API → New key and paste it in (it is
+   not echoed). This is *your* key, for you and your coding assistant. The wizard checks it with `GET /me`, writes it to `.env` as `NOAN_API_KEY` and
    `NOAN_PERSONAL_API_KEY`, and makes sure `.env` is gitignored. Already have `NOAN_API_KEY` in
    your environment? It uses that and never asks.
 2. **Your coding assistants.** Whatever is installed gets the MCP address `https://mcp.getnoan.com/mcp`
@@ -31,8 +31,15 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
 4. **Your fact layer.** If the workspace holds fewer than ten facts, the wizard does not guess
    facts for you. It hands the seeding to your assistant, which has the procedure from the skill:
    read your website, repo and docs, propose a structure, and write only after you say yes.
-5. **The agent pack** (optional, `--agents`). Asks what to call your agent — Verity by default, the
-   name she answers to in NOAN — then forks [getnoan/agent-pack](https://github.com/getnoan/agent-pack)
+5. **The agent pack** (optional, `--agents`). The agents should run as **NOAN's agent identity**,
+   not as you: an Owner creates it once under Settings → Team → Agent, and mints its keys under
+   Team → Agent → API keys. The wizard asks for that agent key (or takes `--agent-key` /
+   `NOAN_AGENT_API_KEY`) and checks it is the agent's. The agents then run on it, answer to the
+   agent's id (`AGENT_IDENTITY_IDS`), and take direction from you (`COMMANDERS`). Your own key stays
+   for seeding and your assistant. Skip it and the agents run as you; the wizard warns that your own
+   task comments will then read as the agent's, so steer them by email.
+
+   It asks what to call your agent — Verity by default — then forks [getnoan/agent-pack](https://github.com/getnoan/agent-pack)
    to your account, verifies and stores your model and Resend keys (and optionally a Postgres URL
    and a Firecrawl key) as repository secrets, runs the pack's seed scripts so each agent's starting
    instructions are in your workspace, records the name and the block slugs as repository variables,
@@ -54,7 +61,8 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
    `INSTALL.md` and a one-click Render deploy link.
 
    Your personal NOAN key is **not** written into either service's `.env`: these answer the open
-   internet, so each gets a NOAN key made for it alone. The report says so.
+   internet, so each gets a NOAN key made for it alone, minted under your NOAN agent
+   (Settings → Team → Agent → API keys). The report says so.
 7. **The report.** What happened, and the one thing to do next.
 
 ## For a coding assistant
@@ -82,6 +90,7 @@ Exit codes: 0 done, 2 the key did not work, 3 cancelled, 1 anything else.
 | `-y`, `--yes` | non-interactive |
 | `--json` | machine-readable report (implies `--yes`) |
 | `--api-key <key>` | the NOAN key (else `NOAN_API_KEY`, else a prompt) |
+| `--agent-key <key>` | an agent-owned NOAN key the agent pack runs on (else `NOAN_AGENT_API_KEY`, else a prompt) |
 | `--global` | user-scope client config instead of project scope |
 | `--dir <path>` | the project directory (default: current) |
 | `--agents` / `--no-agents` | include or skip the agent pack step |

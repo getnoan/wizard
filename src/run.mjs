@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { makeUI } from "./ui.mjs";
-import { whoAmI, factCount, classifyWorkspace, looksLikeKey, APP_URL, KEY_PAGE_HINT, MCP_URL } from "./noan.mjs";
+import { whoAmI, factCount, classifyWorkspace, looksLikeKey, APP_URL, KEY_PAGE_HINT, MCP_URL, isAgentIdentity, agentRoles, AGENT_KEY_PAGE_HINT } from "./noan.mjs";
 import { writeEnv, ensureGitignored } from "./env-file.mjs";
 import { wireClients, MANUAL_CLIENTS } from "./clients.mjs";
 import { fetchSkillFiles, skillTargets, installSkill, writePointers } from "./skill.mjs";
@@ -38,7 +38,10 @@ export async function run(args) {
   if (!looksLikeKey(key)) ui.warn("that does not look like a NOAN key (they start with npak_) — checking anyway");
   const me = await whoAmI(key);
   if (!me.ok) { ui.warn(me.reason); report.steps.auth = { ok: false, reason: me.reason }; return finish(2, "cancelled"); }
-  ui.ok(`key accepted: ${me.identity?.email || "?"} in workspace "${me.project?.name || "?"}"`);
+  if (isAgentIdentity(me.identity)) {
+    ui.ok(`key accepted: your NOAN agent "${me.identity?.name || "?"}" (role bot) in workspace "${me.project?.name || "?"}"`);
+    ui.warn("this key belongs to the agent, not to you: your coding assistant will write as the agent too. For your own use, a personal key (" + KEY_PAGE_HINT + ") is the better fit.");
+  } else ui.ok(`key accepted: ${me.identity?.email || "?"} in workspace "${me.project?.name || "?"}"`);
   const env = writeEnv(dir, { NOAN_API_KEY: key, NOAN_PERSONAL_API_KEY: key }, { dryRun: args.dryRun });
   const gi = ensureGitignored(dir, { dryRun: args.dryRun });
   ui.ok(`${env.created ? "wrote" : env.changed ? "updated" : "kept"} ${env.path} (NOAN_API_KEY, NOAN_PERSONAL_API_KEY); .gitignore: ${gi.action}`);
@@ -175,7 +178,32 @@ async function setupAgents({ args, ui, dir, key, me, report, shared = {} }) {
         ? await ui.ask(`Pronouns for ${askedName}, in ${askedName}'s own prose (blank for they/them)`)
         : "") });
 
-  const secrets = { NOAN_PERSONAL_API_KEY: key, ...(anthropic && { [mName]: anthropic }), ...(resend && { RESEND_API_KEY: resend }),
+  /* Who the agents run as, and who steers them (NOAN's agent role). The agents should run on an
+   * AGENT-owned key, so what they write is the agent's and its id is what they answer to; the
+   * people who steer them are humans. Step 1's key is normally the user's own, which stays for
+   * seeding and the coding assistant. See agentRoles in noan.mjs. */
+  let agentKey = null, agentMe = null;
+  if (isAgentIdentity(me.identity)) { agentKey = key; agentMe = me.identity; }
+  else {
+    const given = (args.agentKey || process.env.NOAN_AGENT_API_KEY || "").trim()
+      || (ui.interactive ? await ui.ask(`Agent key, so the agents run as your NOAN agent rather than as you (${AGENT_KEY_PAGE_HINT}; blank to skip)`, { secret: true }) : "");
+    if (given) {
+      const am = await whoAmI(given);
+      if (!am.ok) ui.warn(`agent key not accepted (${am.reason}); continuing without one`);
+      else if (am.project?.id && me.project?.id && am.project.id !== me.project.id) ui.warn(`that agent key is for workspace "${am.project?.name}", not "${me.project?.name}"; continuing without one`);
+      else if (!isAgentIdentity(am.identity)) ui.warn(`that key belongs to ${am.identity?.email || "a person"}, not the agent; continuing without one`);
+      else { agentKey = given; agentMe = am.identity; ui.ok(`agent key accepted: "${am.identity?.name || "agent"}" (role bot)`); }
+    }
+  }
+  const commandersIn = (process.env.COMMANDERS || "").trim()
+    || (isAgentIdentity(me.identity) && ui.interactive ? await ui.ask("Email(s) of the people who steer and approve the agents, comma-separated") : "");
+  const roles = agentRoles({ person: isAgentIdentity(me.identity) ? null : me.identity, agent: agentMe, commanders: commandersIn });
+  for (const w of roles.warnings) ui.warn(w);
+  out.identity = { runAs: roles.runAs, agentIds: roles.agentIds, commanders: roles.commanders };
+  // The pack reads its NOAN key from this secret name; under the agent role it holds the agent's key.
+  const runKey = roles.runAs === "agent" ? agentKey : key;
+
+  const secrets = { NOAN_PERSONAL_API_KEY: runKey, ...(anthropic && { [mName]: anthropic }), ...(resend && { RESEND_API_KEY: resend }),
                     ...(db && { DATABASE_URL: db }), ...(firecrawl && { FIRECRAWL_API_KEY: firecrawl }), NEWSLETTER_UNSUB_SECRET: pack.randomSecret() };
   for (const [n, v] of Object.entries(secrets)) { const r = pack.setSecret(fork.dest, n, v, args.dryRun); out.secrets.push(r); ui.ok(`secret ${n}: ${r.action}${r.error ? ` — ${r.error}` : ""}`); }
   // The endpoint is a repository VARIABLE, not a secret: without it the fork holds a gateway key
@@ -183,7 +211,7 @@ async function setupAgents({ args, ui, dir, key, me, report, shared = {} }) {
   // pack's own workflows had.
   const vars = { DRY_RUN: "1", STATE_BACKEND: db ? "postgres" : "local", ...(mBase && { ANTHROPIC_BASE_URL: mBase }), ...(mailFrom && { MAIL_FROM: mailFrom }), ...(replyTo && { REPLY_TO: replyTo }), ...(escalateTo && { ESCALATE_TO: escalateTo }),
                  ...identity,
-                 COMPANY_NAME: me.project?.name || "", ...(me.identity?.id && { AGENT_IDENTITY_IDS: me.identity.id }), ...(me.identity?.email && { COMMANDERS: me.identity.email }) };
+                 COMPANY_NAME: me.project?.name || "", ...(roles.agentIds && { AGENT_IDENTITY_IDS: roles.agentIds }), ...(roles.commanders && { COMMANDERS: roles.commanders }) };
   // The seeds need the key in the clone's .env; the pack's own .env.example documents the rest.
   pack.writePackEnv(fork.dest, { NOAN_PERSONAL_API_KEY: key, ...(anthropic && { [mName]: anthropic }), ...(mBase && { ANTHROPIC_BASE_URL: mBase }), ...(resend && { RESEND_API_KEY: resend }) }, args.dryRun);
   const seeds = pack.runSeeds(fork.dest, { NOAN_PERSONAL_API_KEY: key }, { dryRun: args.dryRun });
