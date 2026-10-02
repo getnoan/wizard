@@ -9,7 +9,7 @@ import { mergeJsonServer, mergeToml, wireClients } from "../src/clients.mjs";
 import { installSkill, writePointers, POINTER_MARK, fetchSkillFiles } from "../src/skill.mjs";
 import { parseSeedOutput, parseGroundingOutput, packFile, runSeeds, runGroundingCheck, agentIdentity, PACK_VARS, PACK_SECRETS,
   modelBase, modelKeyName, verifyModelKey, DEFAULT_MODEL_BASE } from "../src/agents.mjs";
-import { classifyWorkspace, looksLikeKey } from "../src/noan.mjs";
+import { classifyWorkspace, looksLikeKey, isAgentIdentity, agentRoles, AGENT_KEY_PAGE_HINT } from "../src/noan.mjs";
 import { renderReport } from "../src/report.mjs";
 import { telemetryEnabled, capture, POSTHOG_TOKEN, ALLOWED_PROPERTIES } from "../src/telemetry.mjs";
 
@@ -392,4 +392,53 @@ test("web dry run: no clone yet reads as 'would run', not 'missing'; a missing m
   const n = webNext(WEB_AGENTS.chat, { dest: "/x", deployUrl: null, missingModelKey: "ANTHROPIC_API_KEY" });
   assert.match(n.say, /needs ANTHROPIC_API_KEY too/);
   assert.doesNotMatch(webNext(WEB_AGENTS.meetings, { dest: "/x", deployUrl: null }).say, /needs .* too/);
+});
+
+/* NOAN's agent role: the agents answer to the agent identity (role bot); people steer them. */
+const PERSON = { id: "dan-1", email: "dan@acme.com", role: "owner" };
+const AGENT = { id: "agent-1", email: null, role: "bot", name: "Verity" };   // the API gives the agent no email
+
+test("agent role: role bot is the agent; a person, or an identity with no role, is not", () => {
+  assert.equal(isAgentIdentity(AGENT), true);
+  assert.equal(isAgentIdentity({ id: "x", email: null }), false);
+  assert.equal(isAgentIdentity(PERSON), false);
+  assert.equal(isAgentIdentity(null), false);
+});
+
+test("agent role: person key + agent key -> the agent's id, the person commands, run on the agent key", () => {
+  const r = agentRoles({ person: PERSON, agent: AGENT });
+  assert.equal(r.agentIds, "agent-1");
+  assert.equal(r.commanders, "dan@acme.com");
+  assert.equal(r.runAs, "agent");
+  assert.deepEqual(r.warnings, []);
+});
+
+test("agent role: a person key alone keeps the old setup, and says what it costs", () => {
+  const r = agentRoles({ person: PERSON });
+  assert.equal(r.agentIds, "dan-1");          // unchanged behaviour for existing installs
+  assert.equal(r.commanders, "dan@acme.com");
+  assert.equal(r.runAs, "person");
+  assert.match(r.warnings.join(" "), /comment you write on a task will read as the agent's own/);
+  assert.ok(r.warnings.join(" ").includes(AGENT_KEY_PAGE_HINT));
+});
+
+test("agent role: the agent is never a commander, even as the only key", () => {
+  const alone = agentRoles({ agent: AGENT });
+  assert.equal(alone.agentIds, "agent-1");
+  assert.equal(alone.commanders, "");
+  assert.match(alone.warnings.join(" "), /No commander/);
+  const listed = agentRoles({ agent: AGENT, commanders: "Neal@Acme.com" });
+  assert.equal(listed.commanders, "neal@acme.com");
+});
+
+test("agent role: a person's key passed as the agent key is not taken as the agent", () => {
+  const r = agentRoles({ person: PERSON, agent: { id: "other", email: "x@acme.com", role: "owner" } });
+  assert.equal(r.agentIds, "dan-1");
+  assert.equal(r.runAs, "person");
+});
+
+test("args: --agent-key in both spellings", () => {
+  assert.equal(parseArgs(["--agent-key", "npak_a"]).agentKey, "npak_a");
+  assert.equal(parseArgs(["--agent-key=npak_b"]).agentKey, "npak_b");
+  assert.equal(parseArgs([]).agentKey, null);
 });

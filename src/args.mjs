@@ -20,6 +20,7 @@ Options:
   -y, --yes            non-interactive: take every default, never prompt (for an agent mid-session)
   --json               machine-readable report on stdout (implies --yes)
   --api-key <key>      the NOAN key (else NOAN_API_KEY / NOAN_PERSONAL_API_KEY, else a prompt)
+  --agent-key <key>    an agent-owned NOAN key the agent pack runs on (else NOAN_AGENT_API_KEY, else a prompt)
   --global             write user-scope client config (~/.claude.json, ~/.cursor/mcp.json, ...)
                        instead of project scope (.mcp.json, .cursor/mcp.json, .vscode/mcp.json)
   --dir <path>         the project directory (default: the current directory)
@@ -37,7 +38,7 @@ Exit codes: 0 done · 2 the key did not work · 3 cancelled · 1 anything else
 `;
 
 export function parseArgs(argv) {
-  const a = { yes: false, json: false, apiKey: null, global: false, dir: process.cwd(), agents: null, meetings: null, chat: null,
+  const a = { yes: false, json: false, apiKey: null, agentKey: null, global: false, dir: process.cwd(), agents: null, meetings: null, chat: null,
               mcp: true, skill: true, dryRun: false, telemetry: true, help: false, version: false, unknown: [] };
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i];
@@ -46,6 +47,8 @@ export function parseArgs(argv) {
     else if (t === "--json") { a.json = true; a.yes = true; }
     else if (t === "--api-key") a.apiKey = next();
     else if (t.startsWith("--api-key=")) a.apiKey = t.slice(10);
+    else if (t === "--agent-key") a.agentKey = next();
+    else if (t.startsWith("--agent-key=")) a.agentKey = t.slice(12);
     else if (t === "--global") a.global = true;
     else if (t === "--dir") a.dir = next();
     else if (t.startsWith("--dir=")) a.dir = t.slice(6);
