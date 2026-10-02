@@ -4,7 +4,7 @@ export const MCP_URL = "https://mcp.getnoan.com/mcp";
 export const APP_URL = "https://app.getnoan.com";
 export const KEY_PAGE_HINT = "app.getnoan.com → Settings → API → New key";
 /** Where an AGENT-owned key is minted: NOAN's agent identity (role bot), created by an Owner. */
-export const AGENT_KEY_PAGE_HINT = "app.getnoan.com → Settings → Team → Agent → API keys";
+export const AGENT_KEY_PAGE_HINT = "app.getnoan.com → Settings → API → Agent API Keys";
 
 export function looksLikeKey(k) { return typeof k === "string" && /^npak_[A-Za-z0-9_-]{16,}$/.test(k.trim()); }
 
@@ -31,7 +31,7 @@ export function isAgentIdentity(identity) {
  * Who the agents run as, and who steers them, from GET /me on the keys the user gave.
  *
  * NOAN has an agent role: one agent identity per workspace (role bot, no login), which an Owner
- * creates under Settings → Team → Agent and mints keys for. Its id is what the agents answer to
+ * creates under Settings → Team → Agent; its keys are minted under Settings → API → Agent API Keys. Its id is what the agents answer to
  * (AGENT_IDENTITY_IDS: tasks assigned to it trigger them, comments by it are the agent's own).
  * The people who steer and approve (COMMANDERS) are humans, never the agent.
  *

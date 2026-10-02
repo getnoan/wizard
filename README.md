@@ -33,7 +33,7 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
    read your website, repo and docs, propose a structure, and write only after you say yes.
 5. **The agent pack** (optional, `--agents`). The agents should run as **NOAN's agent identity**,
    not as you: an Owner creates it once under Settings → Team → Agent, and mints its keys under
-   Team → Agent → API keys. The wizard asks for that agent key (or takes `--agent-key` /
+   Settings → API → Agent API Keys. The wizard asks for that agent key (or takes `--agent-key` /
    `NOAN_AGENT_API_KEY`) and checks it is the agent's. The agents then run on it, answer to the
    agent's id (`AGENT_IDENTITY_IDS`), and take direction from you (`COMMANDERS`). Your own key stays
    for seeding and your assistant. Skip it and the agents run as you; the wizard warns that your own
@@ -62,7 +62,7 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
 
    Your personal NOAN key is **not** written into either service's `.env`: these answer the open
    internet, so each gets a NOAN key made for it alone, minted under your NOAN agent
-   (Settings → Team → Agent → API keys). The report says so.
+   (Settings → API → Agent API Keys). The report says so.
 7. **The report.** What happened, and the one thing to do next.
 
 ## For a coding assistant
