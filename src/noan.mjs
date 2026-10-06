@@ -22,6 +22,10 @@ export async function whoAmI(key) {
   return { ok: true, project: body.project, identity: body.identity };
 }
 
+/** The pack's variables naming who gets work an agent hands back: identity ids, comma-separated.
+ *  HUMAN_IDENTITIES (email=id pairs) is the sixth, set alongside these. */
+export const HAND_BACK_ASSIGNEE_VARS = ["FACT_ALIGNMENT_REVIEW_ASSIGNEES", "PARK_ASSIGNEES_CS", "PARK_ASSIGNEES_SALES", "PARK_ASSIGNEES_ENG", "REPLY_HUMAN_ASSIGNEES"];
+
 /** Is this /me identity NOAN's agent? Its role is "bot" (and the API gives it no email). */
 export function isAgentIdentity(identity) {
   return identity?.role === "bot";
@@ -44,7 +48,16 @@ export function isAgentIdentity(identity) {
  *   commanders  extra addresses (COMMANDERS env or a prompt), comma-separated
  *
  * Returns the ids/addresses to configure, which key the agents should run on ("agent" or
- * "person"), and the warnings to say out loud.
+ * "person"), who gets the work the agents hand back (handBack), and the warnings to say out loud.
+ *
+ * handBack matters only under the agent role. On a person's key the pack falls back to that
+ * person (fact alignment's review) or to nobody (parks never read GET /me); on the agent's key
+ * every fallback is deliberately refused, because handing work to the key's owner would hand it
+ * to the agent. So with no hand-back settings an agent-key install files its weekly review, its
+ * parked tasks and its support follow-ups with no person on them, and nothing errors. The person
+ * who ran the wizard is the default owner of all of it. On a person's key handBack stays empty:
+ * that person IS the agent there (AGENT_IDENTITY_IDS), so assigning them would hand the work
+ * straight back to the agents.
  */
 export function agentRoles({ person = null, agent = null, commanders = "" } = {}) {
   const warnings = [];
@@ -61,6 +74,17 @@ export function agentRoles({ person = null, agent = null, commanders = "" } = {}
       `(${AGENT_KEY_PAGE_HINT}) and re-run with --agent-key.`);
   }
   if (!out.commanders) warnings.push("No commander: nobody can steer or approve the agents until COMMANDERS lists a person's email.");
+  out.handBack = {};
+  if (out.runAs === "agent") {
+    const human = person && !isAgentIdentity(person) && person.id ? person : null;
+    if (human) {
+      for (const n of HAND_BACK_ASSIGNEE_VARS) out.handBack[n] = human.id;
+      if (human.email) out.handBack.HUMAN_IDENTITIES = `${String(human.email).toLowerCase()}=${human.id}`;
+    } else warnings.push(
+      "No person's key, so the work the agents hand back (the weekly fact review, parked tasks, support follow-ups) " +
+      `has nobody to go to. Set ${HAND_BACK_ASSIGNEE_VARS.join(", ")} on the fork to a person's NOAN identity id ` +
+      "(GET /me with their key), or re-run with your own key first and the agent key as --agent-key.");
+  }
   return out;
 }
 

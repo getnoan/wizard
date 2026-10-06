@@ -229,7 +229,20 @@ async function setupAgents({ args, ui, dir, key, me, report, shared = {} }) {
       report.next.push({ id: "grounding", say: `Fill the ${grounding.gaps.length} block(s) the agents read (tasks are on your NOAN board): ${grounding.gaps.map(g => g.title).join(", ")}.`, why: "an agent grounded in an empty block fails quietly" });
     } else ui.ok("every block the agents read holds a fact");
   }
+  // Who gets work handed back (agent role only, see agentRoles). An env value wins; one already
+  // set on the fork is kept, since it is a list a person may have extended with teammates.
+  const have = pack.existingVariables(fork.dest, args.dryRun);
+  const handBackKept = [], handBackToYou = [];
+  for (const [n, v] of Object.entries(roles.handBack)) {
+    const given = (process.env[n] || "").trim();
+    if (given) vars[n] = given;
+    else if (have.has(n)) handBackKept.push(n);
+    else { vars[n] = v; handBackToYou.push(n); }
+  }
+  out.handBack = { toYou: handBackToYou, kept: handBackKept };
   for (const [n, v] of Object.entries(vars)) { if (!v) continue; const r = pack.setVariable(fork.dest, n, v, args.dryRun); out.variables.push(r); }
+  if (handBackToYou.length) ui.ok(`work the agents hand back goes to ${me.identity?.email || "you"} (fact review, parked tasks, support follow-ups)`);
+  if (handBackKept.length) ui.ok(`kept the fork's own ${handBackKept.join(", ")}`);
   ui.ok(`${out.variables.length} repository variable(s) ${args.dryRun ? "to set" : "set"} (DRY_RUN=1: every agent stays in safe mode)`);
   // No point dispatching a run that will only fail for a missing key: say what is missing instead.
   if (!anthropic || !resend) {

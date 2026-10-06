@@ -35,7 +35,8 @@ export function parseSeedOutput(text) {
  *  name for the model key and one of the two is required. It is listed so a caller enumerating
  *  the pack's secrets knows the name exists, not so anyone sets both. */
 export const PACK_SECRETS = ["NOAN_PERSONAL_API_KEY", "RESEND_API_KEY", "ANTHROPIC_API_KEY", "LLM_API_KEY", "DATABASE_URL", "FIRECRAWL_API_KEY", "NEWSLETTER_UNSUB_SECRET"];
-export const PACK_VARS = ["MAIL_FROM", "REPLY_TO", "ESCALATE_TO", "STATE_BACKEND", "ANTHROPIC_BASE_URL", "AGENT_NAME", "COMPANY_NAME", "AGENT_IDENTITY_IDS", "COMMANDERS", "REPORT_RECIPIENT_TAG"];
+export const PACK_VARS = ["MAIL_FROM", "REPLY_TO", "ESCALATE_TO", "STATE_BACKEND", "ANTHROPIC_BASE_URL", "AGENT_NAME", "COMPANY_NAME", "AGENT_IDENTITY_IDS", "COMMANDERS", "REPORT_RECIPIENT_TAG",
+                          "FACT_ALIGNMENT_REVIEW_ASSIGNEES", "PARK_ASSIGNEES_CS", "PARK_ASSIGNEES_SALES", "PARK_ASSIGNEES_ENG", "REPLY_HUMAN_ASSIGNEES", "HUMAN_IDENTITIES"];
 
 /** The pack's model endpoint, from the same variable the pack itself reads. Bare base, no
  *  trailing slash; empty string means the default vendor.
@@ -121,6 +122,13 @@ export function setSecret(dest, name, value, dryRun) {
   if (dryRun) return { name, action: "would set" };
   const r = spawnSync("gh", ["secret", "set", name], { cwd: dest, input: value, encoding: "utf8" });
   return { name, action: r.status === 0 ? "set" : "failed", error: r.status === 0 ? undefined : (r.stderr || "").trim().split("\n")[0] };
+}
+/** The repository variables already set on the fork, by name. A list that cannot be read is
+ *  empty: the defaults are then written, and the gh failure shows on the set that follows. */
+export function existingVariables(dest, dryRun) {
+  if (dryRun) return new Set();
+  const r = spawnSync("gh", ["variable", "list", "--json", "name", "-q", ".[].name"], { cwd: dest, encoding: "utf8" });
+  return new Set(r.status === 0 ? r.stdout.split("\n").map(s => s.trim()).filter(Boolean) : []);
 }
 export function setVariable(dest, name, value, dryRun) {
   if (dryRun) return { name, action: "would set" };
