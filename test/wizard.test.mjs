@@ -9,7 +9,7 @@ import { mergeJsonServer, mergeToml, wireClients } from "../src/clients.mjs";
 import { installSkill, writePointers, POINTER_MARK, fetchSkillFiles } from "../src/skill.mjs";
 import { parseSeedOutput, parseGroundingOutput, packFile, runSeeds, runGroundingCheck, agentIdentity, PACK_VARS, PACK_SECRETS,
   modelBase, modelKeyName, verifyModelKey, DEFAULT_MODEL_BASE } from "../src/agents.mjs";
-import { classifyWorkspace, looksLikeKey, isAgentIdentity, agentRoles, AGENT_KEY_PAGE_HINT } from "../src/noan.mjs";
+import { classifyWorkspace, looksLikeKey, isAgentIdentity, agentRoles, AGENT_KEY_PAGE_HINT, HAND_BACK_ASSIGNEE_VARS } from "../src/noan.mjs";
 import { renderReport } from "../src/report.mjs";
 import { telemetryEnabled, capture, POSTHOG_TOKEN, ALLOWED_PROPERTIES } from "../src/telemetry.mjs";
 
@@ -435,6 +435,31 @@ test("agent role: a person's key passed as the agent key is not taken as the age
   const r = agentRoles({ person: PERSON, agent: { id: "other", email: "x@acme.com", role: "owner" } });
   assert.equal(r.agentIds, "dan-1");
   assert.equal(r.runAs, "person");
+});
+
+test("agent role: under the agent's key, the person who ran the wizard gets the work handed back", () => {
+  // The pack refuses every GET /me fallback on the agent's key, so unset these and the weekly
+  // review, parked tasks and support follow-ups land with no person on them.
+  const r = agentRoles({ person: { ...PERSON, email: "Dan@Acme.com" }, agent: AGENT });
+  for (const n of HAND_BACK_ASSIGNEE_VARS) assert.equal(r.handBack[n], "dan-1", n);
+  assert.equal(r.handBack.HUMAN_IDENTITIES, "dan@acme.com=dan-1");
+  assert.ok(!Object.values(r.handBack).some(v => v.includes("agent-1")), "never the agent");
+});
+
+test("agent role: on a person's key nothing is handed back, because that person is the agent", () => {
+  assert.deepEqual(agentRoles({ person: PERSON }).handBack, {});
+});
+
+test("agent role: the agent's key alone has nobody to hand back to, and says so", () => {
+  const r = agentRoles({ agent: AGENT, commanders: "neal@acme.com" });
+  assert.deepEqual(r.handBack, {});
+  const w = r.warnings.join(" ");
+  assert.match(w, /has nobody to go to/);
+  for (const n of HAND_BACK_ASSIGNEE_VARS) assert.ok(w.includes(n), n);
+});
+
+test("agent role: every hand-back variable is one the pack documents", () => {
+  for (const n of [...HAND_BACK_ASSIGNEE_VARS, "HUMAN_IDENTITIES"]) assert.ok(PACK_VARS.includes(n), n);
 });
 
 test("args: --agent-key in both spellings", () => {

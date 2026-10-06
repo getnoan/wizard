@@ -35,7 +35,10 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
    not as you: an Owner creates it once under Settings → Team → Agent, and mints its keys under
    Settings → API → Agent API Keys. The wizard asks for that agent key (or takes `--agent-key` /
    `NOAN_AGENT_API_KEY`) and checks it is the agent's. The agents then run on it, answer to the
-   agent's id (`AGENT_IDENTITY_IDS`), and take direction from you (`COMMANDERS`). Your own key stays
+   agent's id (`AGENT_IDENTITY_IDS`), and take direction from you (`COMMANDERS`). Work they hand
+   back to a person (the weekly fact review, parked tasks, support follow-ups) goes to you: the
+   `PARK_ASSIGNEES_*`, `FACT_ALIGNMENT_REVIEW_ASSIGNEES`, `REPLY_HUMAN_ASSIGNEES` and
+   `HUMAN_IDENTITIES` variables, which a re-run keeps if you have since changed them. Your own key stays
    for seeding and your assistant. Skip it and the agents run as you; the wizard warns that your own
    task comments will then read as the agent's, so steer them by email.
 
