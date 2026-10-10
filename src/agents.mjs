@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { writeEnv } from "./env-file.mjs";
+import { writeEnv, readEnvValue } from "./env-file.mjs";
 
 export const PACK_REPO = "getnoan/agent-pack";
 
@@ -141,6 +141,12 @@ export function forkStateVars(have, { db = "" } = {}) {
   else set.STATE_BACKEND = "local";
   return { set, kept };
 }
+/** The repository secrets already set on the fork, by name. Same rules as existingVariables. */
+export function existingSecrets(dest, dryRun) {
+  if (dryRun) return new Set();
+  const r = spawnSync("gh", ["secret", "list", "--json", "name", "-q", ".[].name"], { cwd: dest, encoding: "utf8" });
+  return new Set(r.status === 0 ? r.stdout.split("\n").map(s => s.trim()).filter(Boolean) : []);
+}
 export function setVariable(dest, name, value, dryRun) {
   if (dryRun) return { name, action: "would set" };
   const r = spawnSync("gh", ["variable", "set", name, "--body", value], { cwd: dest, encoding: "utf8" });
@@ -206,6 +212,21 @@ export function dispatchDryRun(dest, workflow, dryRun) {
 }
 
 export const randomSecret = () => randomBytes(24).toString("hex");
+
+export const UNSUB_SECRET = "NEWSLETTER_UNSUB_SECRET";
+
+/** The newsletter signs every unsubscribe link with this secret and the user's own site checks it
+ *  with the same value. A GitHub secret can't be read back, so the clone's .env holds the copy the
+ *  user reads. An existing value is kept: a new one breaks every unsubscribe link already sent. */
+export function unsubSecret(dest, forkSecrets, { dryRun = false } = {}) {
+  const onFork = forkSecrets.has(UNSUB_SECRET);
+  const local = readEnvValue(dest, UNSUB_SECRET);
+  if (local) return { value: local, setOnFork: !onFork, action: onFork ? "kept" : "set from .env" };
+  if (onFork) return { value: null, setOnFork: false, action: "kept, not in .env" };
+  const value = randomSecret();
+  writeEnv(dest, { [UNSUB_SECRET]: value }, { dryRun });
+  return { value, setOnFork: true, action: "created" };
+}
 
 /** Write the pack's .env in the clone so the seeds (and a local run) have what they need. */
 export function writePackEnv(dest, pairs, dryRun) { return writeEnv(dest, pairs, { dryRun }); }

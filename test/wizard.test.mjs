@@ -4,11 +4,11 @@ import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync } from 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "../src/args.mjs";
-import { upsertEnv, writeEnv, ensureGitignored } from "../src/env-file.mjs";
+import { upsertEnv, writeEnv, ensureGitignored, readEnvValue } from "../src/env-file.mjs";
 import { mergeJsonServer, mergeToml, wireClients } from "../src/clients.mjs";
 import { installSkill, writePointers, POINTER_MARK, fetchSkillFiles } from "../src/skill.mjs";
 import { parseSeedOutput, parseGroundingOutput, packFile, runSeeds, runGroundingCheck, agentIdentity, PACK_VARS, PACK_SECRETS,
-  modelBase, modelKeyName, verifyModelKey, DEFAULT_MODEL_BASE, forkStateVars } from "../src/agents.mjs";
+  modelBase, modelKeyName, verifyModelKey, DEFAULT_MODEL_BASE, forkStateVars, unsubSecret, UNSUB_SECRET } from "../src/agents.mjs";
 import { classifyWorkspace, looksLikeKey, isAgentIdentity, agentRoles, AGENT_KEY_PAGE_HINT, HAND_BACK_ASSIGNEE_VARS } from "../src/noan.mjs";
 import { renderReport } from "../src/report.mjs";
 import { telemetryEnabled, capture, POSTHOG_TOKEN, ALLOWED_PROPERTIES } from "../src/telemetry.mjs";
@@ -312,6 +312,26 @@ test("fork state: a new fork starts in safe mode; a re-run keeps DRY_RUN, and ke
   const rerun = new Set(["DRY_RUN", "STATE_BACKEND", "AGENT_NAME"]);
   assert.deepEqual(forkStateVars(rerun), { set: {}, kept: ["DRY_RUN", "STATE_BACKEND"] });
   assert.deepEqual(forkStateVars(rerun, { db: "postgres://x" }), { set: { STATE_BACKEND: "postgres" }, kept: ["DRY_RUN"] });
+});
+
+test("unsubscribe secret: created once and readable in the clone's .env, never replaced on a re-run", () => {
+  const d = tmp();
+  const first = unsubSecret(d, new Set());
+  assert.equal(first.action, "created"); assert.equal(first.setOnFork, true);
+  assert.equal(readEnvValue(d, UNSUB_SECRET), first.value);
+  assert.deepEqual(unsubSecret(d, new Set([UNSUB_SECRET])), { value: first.value, setOnFork: false, action: "kept" });
+  assert.deepEqual(unsubSecret(d, new Set()), { value: first.value, setOnFork: true, action: "set from .env" });
+
+  const quoted = tmp(); writeFileSync(path.join(quoted, ".env"), `export ${UNSUB_SECRET}="abc123"\n`);
+  assert.equal(unsubSecret(quoted, new Set([UNSUB_SECRET])).value, "abc123");
+
+  const forkOnly = tmp();
+  assert.deepEqual(unsubSecret(forkOnly, new Set([UNSUB_SECRET])), { value: null, setOnFork: false, action: "kept, not in .env" });
+  assert.equal(existsSync(path.join(forkOnly, ".env")), false);
+
+  const dry = tmp();
+  assert.equal(unsubSecret(dry, new Set(), { dryRun: true }).action, "created");
+  assert.equal(existsSync(path.join(dry, ".env")), false);
 });
 
 test("pack files: a name the layout does not list falls back to agents/; an unreadable layout throws", () => {

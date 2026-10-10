@@ -48,6 +48,10 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
    instructions are in your workspace, records the name and the block slugs as repository variables,
    and triggers one dry run. Safe mode stays on: the wizard never sets `DRY_RUN` to 0, and a re-run keeps the fork's `DRY_RUN`, and its `STATE_BACKEND` unless you give a Postgres URL. That switch is yours.
 
+   The newsletter signs unsubscribe links with `NEWSLETTER_UNSUB_SECRET`, and your site has to check
+   them with the same value. The wizard creates it once, stores it as a repository secret and in
+   `noan-agent-pack/.env` so you can copy it to your site, and keeps it on every re-run.
+
    The model does not have to be Anthropic's. Set `ANTHROPIC_BASE_URL` in the environment before
    running — `https://openrouter.ai/api`, say, or your own gateway — and the wizard verifies your key
    against *that* endpoint, stores it as `LLM_API_KEY`, and records the endpoint as a repository
