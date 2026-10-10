@@ -25,7 +25,7 @@
 - Project dir: `.env`, `.gitignore`, `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, `.gemini/settings.json`, `.claude/skills/`, and a pointer block in `CLAUDE.md` and `AGENTS.md` (created if absent).
 - Home dir: `~/.codex/config.toml` and `~/.codex/skills/` when Codex is present; with `--global`, `~/.claude.json`, `~/.cursor/mcp.json`, `~/.gemini/settings.json`, `~/.codeium/windsurf/mcp_config.json`, `~/.claude/skills/`.
 - With `--agents`, `--meetings`, `--chat`: clones in `noan-agent-pack/`, `verity-meetings/`, `verity-chat/` under the project dir, plus GitHub secrets and variables on the user's forks.
-- **Every write must be a merge, and a re-run must change nothing.** JSON configs update only `servers.noan`/`mcpServers.noan`, TOML only `[mcp_servers.noan]`, `.env` only the given keys, pointers are skipped when `<!-- noan-wizard -->` is present, an existing `SESSION_SECRET` is kept. The fork's secrets and variables don't meet this yet: every run sets `DRY_RUN=1` again and creates a new `NEWSLETTER_UNSUB_SECRET`. A new writer needs the same "unchanged on re-run" test.
+- **Every write must be a merge, and a re-run must change nothing.** JSON configs update only `servers.noan`/`mcpServers.noan`, TOML only `[mcp_servers.noan]`, `.env` only the given keys, pointers are skipped when `<!-- noan-wizard -->` is present, an existing `SESSION_SECRET` is kept. On the fork, an existing `DRY_RUN`, `STATE_BACKEND` (unless a Postgres URL is given), hand-back assignees and `NEWSLETTER_UNSUB_SECRET` are kept. A new writer needs the same "unchanged on re-run" test.
 - Every write respects `--dry-run`. `--dry-run` still calls the NOAN API and fetches the skill.
 - **The wizard never sets `DRY_RUN` to 0** on the agent pack.
 
