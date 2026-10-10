@@ -46,7 +46,7 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
    to your account, verifies and stores your model and Resend keys (and optionally a Postgres URL
    and a Firecrawl key) as repository secrets, runs the pack's seed scripts so each agent's starting
    instructions are in your workspace, records the name and the block slugs as repository variables,
-   and triggers one dry run. Safe mode stays on: the wizard never sets `DRY_RUN` to 0, and a re-run keeps whatever `DRY_RUN` the fork already has. That switch is yours.
+   and triggers one dry run. Safe mode stays on: the wizard never sets `DRY_RUN` to 0, and a re-run keeps the fork's `DRY_RUN`, and its `STATE_BACKEND` unless you give a Postgres URL. That switch is yours.
 
    The model does not have to be Anthropic's. Set `ANTHROPIC_BASE_URL` in the environment before
    running — `https://openrouter.ai/api`, say, or your own gateway — and the wizard verifies your key

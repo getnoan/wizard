@@ -130,9 +130,17 @@ export function existingVariables(dest, dryRun) {
   const r = spawnSync("gh", ["variable", "list", "--json", "name", "-q", ".[].name"], { cwd: dest, encoding: "utf8" });
   return new Set(r.status === 0 ? r.stdout.split("\n").map(s => s.trim()).filter(Boolean) : []);
 }
-/** DRY_RUN=1 only on a fork that has no DRY_RUN yet. Once set, it's the user's switch for taking
- *  agents live, so a re-run leaves it alone. */
-export const safeModeVars = (have) => (have.has("DRY_RUN") ? {} : { DRY_RUN: "1" });
+/** The variables a re-run must not undo. DRY_RUN=1 only on a fork that has none, since it's the
+ *  user's switch for taking agents live. STATE_BACKEND follows a Postgres URL given on this run,
+ *  else keeps the fork's, so leaving the prompt blank doesn't drop the agents' state ledger. */
+export function forkStateVars(have, { db = "" } = {}) {
+  const set = {}, kept = [];
+  if (have.has("DRY_RUN")) kept.push("DRY_RUN"); else set.DRY_RUN = "1";
+  if (db) set.STATE_BACKEND = "postgres";
+  else if (have.has("STATE_BACKEND")) kept.push("STATE_BACKEND");
+  else set.STATE_BACKEND = "local";
+  return { set, kept };
+}
 export function setVariable(dest, name, value, dryRun) {
   if (dryRun) return { name, action: "would set" };
   const r = spawnSync("gh", ["variable", "set", name, "--body", value], { cwd: dest, encoding: "utf8" });

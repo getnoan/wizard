@@ -8,7 +8,7 @@ import { upsertEnv, writeEnv, ensureGitignored } from "../src/env-file.mjs";
 import { mergeJsonServer, mergeToml, wireClients } from "../src/clients.mjs";
 import { installSkill, writePointers, POINTER_MARK, fetchSkillFiles } from "../src/skill.mjs";
 import { parseSeedOutput, parseGroundingOutput, packFile, runSeeds, runGroundingCheck, agentIdentity, PACK_VARS, PACK_SECRETS,
-  modelBase, modelKeyName, verifyModelKey, DEFAULT_MODEL_BASE, safeModeVars } from "../src/agents.mjs";
+  modelBase, modelKeyName, verifyModelKey, DEFAULT_MODEL_BASE, forkStateVars } from "../src/agents.mjs";
 import { classifyWorkspace, looksLikeKey, isAgentIdentity, agentRoles, AGENT_KEY_PAGE_HINT, HAND_BACK_ASSIGNEE_VARS } from "../src/noan.mjs";
 import { renderReport } from "../src/report.mjs";
 import { telemetryEnabled, capture, POSTHOG_TOKEN, ALLOWED_PROPERTIES } from "../src/telemetry.mjs";
@@ -306,9 +306,12 @@ for (const grouped of [false, true]) {
   });
 }
 
-test("safe mode: a new fork gets DRY_RUN=1, a re-run leaves the fork's own DRY_RUN alone", () => {
-  assert.deepEqual(safeModeVars(new Set()), { DRY_RUN: "1" });
-  assert.deepEqual(safeModeVars(new Set(["DRY_RUN", "AGENT_NAME"])), {});
+test("fork state: a new fork starts in safe mode; a re-run keeps DRY_RUN, and keeps STATE_BACKEND unless a Postgres URL is given", () => {
+  assert.deepEqual(forkStateVars(new Set()), { set: { DRY_RUN: "1", STATE_BACKEND: "local" }, kept: [] });
+  assert.deepEqual(forkStateVars(new Set(), { db: "postgres://x" }), { set: { DRY_RUN: "1", STATE_BACKEND: "postgres" }, kept: [] });
+  const rerun = new Set(["DRY_RUN", "STATE_BACKEND", "AGENT_NAME"]);
+  assert.deepEqual(forkStateVars(rerun), { set: {}, kept: ["DRY_RUN", "STATE_BACKEND"] });
+  assert.deepEqual(forkStateVars(rerun, { db: "postgres://x" }), { set: { STATE_BACKEND: "postgres" }, kept: ["DRY_RUN"] });
 });
 
 test("pack files: a name the layout does not list falls back to agents/; an unreadable layout throws", () => {
