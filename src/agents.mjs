@@ -130,6 +130,9 @@ export function existingVariables(dest, dryRun) {
   const r = spawnSync("gh", ["variable", "list", "--json", "name", "-q", ".[].name"], { cwd: dest, encoding: "utf8" });
   return new Set(r.status === 0 ? r.stdout.split("\n").map(s => s.trim()).filter(Boolean) : []);
 }
+/** DRY_RUN=1 only on a fork that has no DRY_RUN yet. Once set, it's the user's switch for taking
+ *  agents live, so a re-run leaves it alone. */
+export const safeModeVars = (have) => (have.has("DRY_RUN") ? {} : { DRY_RUN: "1" });
 export function setVariable(dest, name, value, dryRun) {
   if (dryRun) return { name, action: "would set" };
   const r = spawnSync("gh", ["variable", "set", name, "--body", value], { cwd: dest, encoding: "utf8" });
