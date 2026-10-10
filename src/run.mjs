@@ -204,8 +204,15 @@ async function setupAgents({ args, ui, dir, key, me, report, shared = {} }) {
   const runKey = roles.runAs === "agent" ? agentKey : key;
 
   const secrets = { NOAN_PERSONAL_API_KEY: runKey, ...(anthropic && { [mName]: anthropic }), ...(resend && { RESEND_API_KEY: resend }),
-                    ...(db && { DATABASE_URL: db }), ...(firecrawl && { FIRECRAWL_API_KEY: firecrawl }), NEWSLETTER_UNSUB_SECRET: pack.randomSecret() };
+                    ...(db && { DATABASE_URL: db }), ...(firecrawl && { FIRECRAWL_API_KEY: firecrawl }) };
+  const unsub = pack.unsubSecret(fork.dest, pack.existingSecrets(fork.dest, args.dryRun), { dryRun: args.dryRun });
+  if (unsub.setOnFork) secrets[pack.UNSUB_SECRET] = unsub.value;
   for (const [n, v] of Object.entries(secrets)) { const r = pack.setSecret(fork.dest, n, v, args.dryRun); out.secrets.push(r); ui.ok(`secret ${n}: ${r.action}${r.error ? ` — ${r.error}` : ""}`); }
+  if (!unsub.setOnFork) { out.secrets.push({ name: pack.UNSUB_SECRET, action: unsub.action }); ui.ok(`secret ${pack.UNSUB_SECRET}: ${unsub.action}`); }
+  if (unsub.action === "kept, not in .env") {
+    ui.warn(`${pack.UNSUB_SECRET} is on the fork but not in ${fork.dest}/.env, so your site can't check newsletter unsubscribe links with it`);
+    report.next.push({ id: "unsub-secret", say: `Before sending a newsletter, pick a new ${pack.UNSUB_SECRET} and set it in ${fork.dest}/.env, as the fork's secret, and on your site.`, why: "the site checks unsubscribe links with the same value the agents sign them with" });
+  }
   // The endpoint is a repository VARIABLE, not a secret: without it the fork holds a gateway key
   // and still calls the default vendor, which is the same "documented is not delivered" trap the
   // pack's own workflows had.

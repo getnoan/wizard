@@ -16,6 +16,14 @@ export function upsertEnv(text, pairs) {
   return out.join("\n") + "\n";
 }
 
+/** One key's value from dir/.env, "" when the file or the key is missing. */
+export function readEnvValue(dir, key) {
+  const p = path.join(dir, ".env");
+  if (!existsSync(p)) return "";
+  const m = readFileSync(p, "utf8").match(new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=\\s*(\\S+)`, "m"));
+  return m ? m[1].replace(/^["']|["']$/g, "") : "";
+}
+
 export function writeEnv(dir, pairs, { dryRun = false } = {}) {
   const p = path.join(dir, ".env");
   const before = existsSync(p) ? readFileSync(p, "utf8") : "";
