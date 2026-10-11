@@ -130,6 +130,17 @@ export function existingVariables(dest, dryRun) {
   const r = spawnSync("gh", ["variable", "list", "--json", "name", "-q", ".[].name"], { cwd: dest, encoding: "utf8" });
   return new Set(r.status === 0 ? r.stdout.split("\n").map(s => s.trim()).filter(Boolean) : []);
 }
+/** The variables a re-run must not undo. DRY_RUN=1 only on a fork that has none, since it's the
+ *  user's switch for taking agents live. STATE_BACKEND follows a Postgres URL given on this run,
+ *  else keeps the fork's, so leaving the prompt blank doesn't drop the agents' state ledger. */
+export function forkStateVars(have, { db = "" } = {}) {
+  const set = {}, kept = [];
+  if (have.has("DRY_RUN")) kept.push("DRY_RUN"); else set.DRY_RUN = "1";
+  if (db) set.STATE_BACKEND = "postgres";
+  else if (have.has("STATE_BACKEND")) kept.push("STATE_BACKEND");
+  else set.STATE_BACKEND = "local";
+  return { set, kept };
+}
 /** The repository secrets already set on the fork, by name. Same rules as existingVariables. */
 export function existingSecrets(dest, dryRun) {
   if (dryRun) return new Set();

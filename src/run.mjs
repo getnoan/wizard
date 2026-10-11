@@ -216,7 +216,9 @@ async function setupAgents({ args, ui, dir, key, me, report, shared = {} }) {
   // The endpoint is a repository VARIABLE, not a secret: without it the fork holds a gateway key
   // and still calls the default vendor, which is the same "documented is not delivered" trap the
   // pack's own workflows had.
-  const vars = { DRY_RUN: "1", STATE_BACKEND: db ? "postgres" : "local", ...(mBase && { ANTHROPIC_BASE_URL: mBase }), ...(mailFrom && { MAIL_FROM: mailFrom }), ...(replyTo && { REPLY_TO: replyTo }), ...(escalateTo && { ESCALATE_TO: escalateTo }),
+  const have = pack.existingVariables(fork.dest, args.dryRun);
+  const forkState = pack.forkStateVars(have, { db });
+  const vars = { ...forkState.set, ...(mBase && { ANTHROPIC_BASE_URL: mBase }), ...(mailFrom && { MAIL_FROM: mailFrom }), ...(replyTo && { REPLY_TO: replyTo }), ...(escalateTo && { ESCALATE_TO: escalateTo }),
                  ...identity,
                  COMPANY_NAME: me.project?.name || "", ...(roles.agentIds && { AGENT_IDENTITY_IDS: roles.agentIds }), ...(roles.commanders && { COMMANDERS: roles.commanders }) };
   // The seeds need the key in the clone's .env; the pack's own .env.example documents the rest.
@@ -238,7 +240,6 @@ async function setupAgents({ args, ui, dir, key, me, report, shared = {} }) {
   }
   // Who gets work handed back (agent role only, see agentRoles). An env value wins; one already
   // set on the fork is kept, since it is a list a person may have extended with teammates.
-  const have = pack.existingVariables(fork.dest, args.dryRun);
   const handBackKept = [], handBackToYou = [];
   for (const [n, v] of Object.entries(roles.handBack)) {
     const given = (process.env[n] || "").trim();
@@ -250,7 +251,7 @@ async function setupAgents({ args, ui, dir, key, me, report, shared = {} }) {
   for (const [n, v] of Object.entries(vars)) { if (!v) continue; const r = pack.setVariable(fork.dest, n, v, args.dryRun); out.variables.push(r); }
   if (handBackToYou.length) ui.ok(`work the agents hand back goes to ${me.identity?.email || "you"} (fact review, parked tasks, support follow-ups)`);
   if (handBackKept.length) ui.ok(`kept the fork's own ${handBackKept.join(", ")}`);
-  ui.ok(`${out.variables.length} repository variable(s) ${args.dryRun ? "to set" : "set"} (DRY_RUN=1: every agent stays in safe mode)`);
+  ui.ok(`${out.variables.length} repository variable(s) ${args.dryRun ? "to set" : "set"}${forkState.set.DRY_RUN ? " (DRY_RUN=1: every agent stays in safe mode)" : ""}${forkState.kept.length ? `; kept the fork's own ${forkState.kept.join(", ")}` : ""}`);
   // No point dispatching a run that will only fail for a missing key: say what is missing instead.
   if (!anthropic || !resend) {
     const missing = [!anthropic && mName, !resend && "RESEND_API_KEY"].filter(Boolean);

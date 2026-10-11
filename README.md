@@ -46,7 +46,7 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
    to your account, verifies and stores your model and Resend keys (and optionally a Postgres URL
    and a Firecrawl key) as repository secrets, runs the pack's seed scripts so each agent's starting
    instructions are in your workspace, records the name and the block slugs as repository variables,
-   and triggers one dry run. Safe mode stays on: the wizard never sets `DRY_RUN` to 0. That switch is yours.
+   and triggers one dry run. Safe mode stays on: the wizard never sets `DRY_RUN` to 0, and a re-run keeps the fork's `DRY_RUN`, and its `STATE_BACKEND` unless you give a Postgres URL. That switch is yours.
 
    The newsletter signs unsubscribe links with `NEWSLETTER_UNSUB_SECRET`, and your site has to check
    them with the same value. The wizard creates it once, stores it as a repository secret and in
