@@ -19,7 +19,7 @@ export async function whoAmI(key) {
   const { status, body } = await get("/me", key);
   if (status === 401 || status === 403) return { ok: false, reason: "the key was not accepted" };
   if (status !== 200 || !body?.project) return { ok: false, reason: `unexpected answer from NOAN (${status})` };
-  return { ok: true, project: body.project, identity: body.identity };
+  return { ok: true, project: body.project, identity: body.identity, isNewProject: body.isNewProject };
 }
 
 /** The pack's variables naming who gets work an agent hands back: identity ids, comma-separated.
@@ -88,15 +88,15 @@ export function agentRoles({ person = null, agent = null, commanders = "" } = {}
   return out;
 }
 
-/** How many facts the workspace holds — the signal for "empty, hand the seeding over". */
+/** How many facts the workspace holds, for the report. */
 export async function factCount(key) {
   const { status, body } = await get("/facts?per_page=1", key);
   if (status !== 200) return null;
   return body?.meta?.totalItems ?? (Array.isArray(body?.items) ? body.items.length : null);
 }
 
-export const EMPTY_THRESHOLD = 10;
-export function classifyWorkspace(count) {
-  if (count == null) return { state: "unknown", empty: false };
-  return { state: count < EMPTY_THRESHOLD ? "empty" : "populated", empty: count < EMPTY_THRESHOLD, count };
+/** isNewProject from GET /me decides "empty, hand the seeding over"; it is left out for a key that can't read facts. */
+export function classifyWorkspace(isNewProject, count) {
+  if (typeof isNewProject !== "boolean") return { state: "unknown", empty: false, count };
+  return { state: isNewProject ? "empty" : "populated", empty: isNewProject, count };
 }

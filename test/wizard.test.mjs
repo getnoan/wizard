@@ -95,8 +95,8 @@ test("seed output: the *_BLOCK_SLUG lines are the interface", () => {
   assert.deepEqual(v, { DECK_CONFIG_BLOCK_SLUG: "fed75-deck-agent-config", DECK_PLAYBOOK_BLOCK_SLUG: "fed75-deck-playbook" });
 });
 
-test("workspace: fewer than ten facts is empty; unknown stays unknown; key shape", () => {
-  assert.equal(classifyWorkspace(3).state, "empty"); assert.equal(classifyWorkspace(400).state, "populated"); assert.equal(classifyWorkspace(null).state, "unknown");
+test("workspace: isNewProject decides empty; a missing flag stays unknown; key shape", () => {
+  assert.equal(classifyWorkspace(true, 3).state, "empty"); assert.equal(classifyWorkspace(false, 400).state, "populated"); assert.equal(classifyWorkspace(undefined, 3).state, "unknown");
   assert.ok(looksLikeKey("npak_" + "a".repeat(20))); assert.ok(!looksLikeKey("sk-ant-x"));
 });
 

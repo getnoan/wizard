@@ -77,14 +77,14 @@ export async function run(args) {
   /* 4. workspace */
   ui.step(4, "Your fact layer");
   const count = await factCount(key);
-  const ws = classifyWorkspace(count);
+  const ws = classifyWorkspace(me.isNewProject, count);
   report.steps.workspace = ws;
   if (ws.state === "empty") {
     ui.warn(`${count} fact(s): the workspace is empty or nearly so. The wizard does not guess facts.`);
     ui.info("Ask your assistant to set up the workspace: it has the first-connect procedure from the skill and will propose a structure from your website, repo or docs before writing anything.");
     report.next.push({ id: "first-connect", say: "Set up my NOAN workspace from our website and this repo. Propose the structure first and wait for my yes before writing.", why: "the fact layer is empty" });
   } else if (ws.state === "populated") ui.ok(`${count} facts in the workspace`);
-  else ui.warn("could not count the facts (the key may be read-scoped to a subset); carrying on");
+  else ui.warn("could not tell whether the workspace is new (the key may not read facts); carrying on");
 
   /* 5. agents */
   ui.step(5, "The agent pack");
