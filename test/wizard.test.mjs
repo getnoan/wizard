@@ -280,7 +280,7 @@ function fakePack({ grouped }) {
   const d = tmp();
   const put = (rel, body) => { const p = path.join(d, "agents", rel); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, body); };
   const seeds = { "seed-weekly-activity-report.mjs": "weekly-activity-report", "seed-fact-alignment.mjs": "fact-alignment",
-    "seed-market-research-refresh.mjs": "market-research-refresh", "seed-customer-support.mjs": "customer-support", "seed-deck.mjs": "sales-deck" };
+    "seed-market-research-refresh.mjs": "market-research-refresh", "seed-customer-support.mjs": "customer-support", "seed-newsletter.mjs": "newsletter", "seed-deck.mjs": "sales-deck" };
   const files = {};
   for (const [s, folder] of Object.entries(seeds)) {
     const rel = grouped ? `${folder}/${s}` : s; files[s] = rel;
@@ -297,8 +297,8 @@ for (const grouped of [false, true]) {
     const d = fakePack({ grouped });
     assert.equal(packFile(d, "seed-deck.mjs"), path.join(d, "agents", grouped ? "sales-deck/seed-deck.mjs" : "seed-deck.mjs"));
     const { slugs, rows } = runSeeds(d, {});
-    assert.deepEqual(rows.map(r => r.action), ["ran", "ran", "ran", "ran", "ran"]);
-    assert.equal(Object.keys(slugs).length, 5);
+    assert.deepEqual(rows.map(r => r.action), ["ran", "ran", "ran", "ran", "ran", "ran"]);
+    assert.equal(Object.keys(slugs).length, 6);
     // Each seed runs from its own folder, as the pack's CI runs its files.
     assert.equal(slugs.DECK_BLOCK_SLUG, `slug-${grouped ? "sales-deck" : "agents"}`);
     const gc = runGroundingCheck(d, {});

@@ -223,7 +223,7 @@ async function setupAgents({ args, ui, dir, key, me, report, shared = {} }) {
                  COMPANY_NAME: me.project?.name || "", ...(roles.agentIds && { AGENT_IDENTITY_IDS: roles.agentIds }), ...(roles.commanders && { COMMANDERS: roles.commanders }) };
   // The seeds need the key in the clone's .env; the pack's own .env.example documents the rest.
   pack.writePackEnv(fork.dest, { NOAN_PERSONAL_API_KEY: key, ...(anthropic && { [mName]: anthropic }), ...(mBase && { ANTHROPIC_BASE_URL: mBase }), ...(resend && { RESEND_API_KEY: resend }) }, args.dryRun);
-  const seeds = pack.runSeeds(fork.dest, { NOAN_PERSONAL_API_KEY: key }, { dryRun: args.dryRun });
+  const seeds = pack.runSeeds(fork.dest, { NOAN_PERSONAL_API_KEY: key, ...(db && { STATE_BACKEND: "postgres", DATABASE_URL: db }) }, { dryRun: args.dryRun });
   out.seeds = seeds.rows;
   // A missing or failed seed is a warning, not a tick: its agent has no Config fact and no slug variable.
   for (const r of seeds.rows) (/^(missing|failed)$/.test(r.action) ? ui.warn : ui.ok)(`${r.seed}: ${r.action}${r.slugs != null ? ` (${r.slugs} slug(s))` : ""}${r.error ? ` — ${r.error}` : ""}`);

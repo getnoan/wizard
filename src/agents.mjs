@@ -176,7 +176,7 @@ export function packFile(dest, name) {
 
 /** Run every seed script the pack ships; collect the block slugs they print. */
 export function runSeeds(dest, env, { dryRun = false } = {}) {
-  const seeds = ["seed-weekly-activity-report.mjs", "seed-fact-alignment.mjs", "seed-market-research-refresh.mjs", "seed-customer-support.mjs", "seed-deck.mjs"];
+  const seeds = ["seed-weekly-activity-report.mjs", "seed-fact-alignment.mjs", "seed-market-research-refresh.mjs", "seed-customer-support.mjs", "seed-newsletter.mjs", "seed-deck.mjs"];
   const slugs = {}; const rows = [];
   for (const s of seeds) {
     const p = packFile(dest, s);
