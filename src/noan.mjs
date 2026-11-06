@@ -95,7 +95,7 @@ export async function factCount(key) {
   return body?.meta?.totalItems ?? (Array.isArray(body?.items) ? body.items.length : null);
 }
 
-export const EMPTY_THRESHOLD = 10;
+export const EMPTY_THRESHOLD = 15;
 export function classifyWorkspace(count) {
   if (count == null) return { state: "unknown", empty: false };
   return { state: count < EMPTY_THRESHOLD ? "empty" : "populated", empty: count < EMPTY_THRESHOLD, count };
