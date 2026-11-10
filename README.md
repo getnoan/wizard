@@ -28,7 +28,7 @@ Run it again any time; every write is a merge, and nothing you have is overwritt
    [getnoan/skills](https://github.com/getnoan/skills) are copied into `.claude/skills/` (and
    `~/.codex/skills/` if Codex is installed), and a short pointer is appended to `CLAUDE.md` and
    `AGENTS.md` so an assistant knows where the key and the skill are.
-4. **Your fact layer.** If the workspace holds fewer than ten facts, the wizard does not guess
+4. **Your fact layer.** If NOAN reports the workspace as new, the wizard does not guess
    facts for you. It hands the seeding to your assistant, which has the procedure from the skill:
    read your website, repo and docs, propose a structure, and write only after you say yes.
 5. **The agent pack** (optional, `--agents`). The agents should run as **NOAN's agent identity**,
