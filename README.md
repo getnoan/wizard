@@ -7,7 +7,7 @@ npx -y @getnoan/wizard@latest
 ```
 
 It takes your NOAN API key, points your coding assistants at the NOAN MCP server, installs the
-NOAN skill, checks whether your fact layer has anything in it, and, if you want, sets up the six
+NOAN skill, checks whether your fact layer has anything in it, and, if you want, sets up the seven
 open-source agents on your own GitHub account and gets the two web agents — booking pages and a
 site chat — ready to deploy. Then it tells you what it did and what to do next.
 Run it again any time; every write is a merge, and nothing you have is overwritten.
