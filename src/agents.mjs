@@ -36,7 +36,8 @@ export function parseSeedOutput(text) {
  *  the pack's secrets knows the name exists, not so anyone sets both. */
 export const PACK_SECRETS = ["NOAN_PERSONAL_API_KEY", "RESEND_API_KEY", "ANTHROPIC_API_KEY", "LLM_API_KEY", "DATABASE_URL", "FIRECRAWL_API_KEY", "NEWSLETTER_UNSUB_SECRET"];
 export const PACK_VARS = ["MAIL_FROM", "REPLY_TO", "ESCALATE_TO", "STATE_BACKEND", "ANTHROPIC_BASE_URL", "AGENT_NAME", "COMPANY_NAME", "AGENT_IDENTITY_IDS", "COMMANDERS", "REPORT_RECIPIENT_TAG",
-                          "FACT_ALIGNMENT_REVIEW_ASSIGNEES", "PARK_ASSIGNEES_CS", "PARK_ASSIGNEES_SALES", "PARK_ASSIGNEES_ENG", "REPLY_HUMAN_ASSIGNEES", "HUMAN_IDENTITIES"];
+                          "FACT_ALIGNMENT_REVIEW_ASSIGNEES", "PARK_ASSIGNEES_CS", "PARK_ASSIGNEES_SALES", "PARK_ASSIGNEES_ENG", "REPLY_HUMAN_ASSIGNEES", "HUMAN_IDENTITIES",
+                          "RESULTS_REPORT_STACKS", "PARK_ASSIGNEES_RESULTS_REPORT"];
 
 /** The pack's model endpoint, from the same variable the pack itself reads. Bare base, no
  *  trailing slash; empty string means the default vendor.
@@ -176,7 +177,7 @@ export function packFile(dest, name) {
 
 /** Run every seed script the pack ships; collect the block slugs they print. */
 export function runSeeds(dest, env, { dryRun = false } = {}) {
-  const seeds = ["seed-weekly-activity-report.mjs", "seed-fact-alignment.mjs", "seed-market-research-refresh.mjs", "seed-customer-support.mjs", "seed-newsletter.mjs", "seed-deck.mjs"];
+  const seeds = ["seed-weekly-activity-report.mjs", "seed-fact-alignment.mjs", "seed-market-research-refresh.mjs", "seed-customer-support.mjs", "seed-newsletter.mjs", "seed-deck.mjs", "seed-results-report.mjs"];
   const slugs = {}; const rows = [];
   for (const s of seeds) {
     const p = packFile(dest, s);

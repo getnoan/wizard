@@ -89,7 +89,7 @@ export async function run(args) {
   /* 5. agents */
   ui.step(5, "The agent pack");
   let wantAgents = args.agents;
-  if (wantAgents == null) wantAgents = ui.interactive ? await ui.confirm("Set up the six open-source agents on your GitHub account too?", false) : false;
+  if (wantAgents == null) wantAgents = ui.interactive ? await ui.confirm("Set up the seven open-source agents on your GitHub account too?", false) : false;
   // Carries the model key and the agent's name from the pack step to the web step, so a run that
   // does both asks once. Never put in the report: the report is printed, and --json is parsed.
   const shared = {};
